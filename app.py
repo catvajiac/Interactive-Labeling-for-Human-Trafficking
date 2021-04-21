@@ -86,7 +86,7 @@ def gen_page_content(state, df):
     for col, cluster_type in zip(label_cols, ('Trafficking', 'Spam', 'Scam', 'Drug dealer', 'Other')):
         col.write(draw.labeling_buttons(cluster_type))
 
-    
+
 # Generate content for app
 st.set_page_config(layout='wide', page_title='Meta-Clustering Classification')
 state_params = {
@@ -97,14 +97,27 @@ state_params = {
     'gen_clusters': None
 }
 state = SessionState.get(**state_params)
+default_file_path = '../data/aht_data/aggregate_data/aggregate_LSH_labels.csv'
+file_path = st.text_input("Please specify the path of input file")
+
+try:
+    if not os.path.exists(file_path):
+        st.warning("The file does not exist, displaying default dataset.")
+        st.warning("If you would like to use your own dataset, please specify the path again.")
+        file_path = default_file_path
+except:
+    st.warning("Path not correct. Please spcecify a path again.")
+    file_path = default_file_path
 
 with st.spinner('Processing data...'):
-    filename = '../data/aht_data/aggregate_data/aggregate_LSH_labels.csv'
+    filename = file_path
     columns = ['phone', 'email', 'social', 'image_id']
+
     df = utils.read_csv(filename)
 
     if state.is_first:
-        graph = utils.construct_metaclusters(utils.filename_stub(filename), df, columns)
+        graph = utils.construct_metaclusters(
+            utils.filename_stub(filename), df, columns)
         state.gen_clusters = utils.gen_ccs(graph)
 
 gen_page_content(state, df)
