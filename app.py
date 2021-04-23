@@ -81,9 +81,9 @@ def gen_page_content(state, df):
 
     # Number input boxes take up the whole column space -- this makes them shorter
     st.subheader('Labeling: On a scale of 1 (very unlikely) to 5 (very likely), how likely is this to be...')
-    label_cols = st.beta_columns(5)
+    label_cols = st.beta_columns(4)
 
-    for col, cluster_type in zip(label_cols, ('Trafficking', 'Spam', 'Scam', 'Drug dealer', 'Other')):
+    for col, cluster_type in zip(label_cols, ('Trafficking', 'Spam', 'Scam', 'Massage parlor')):
         col.write(draw.labeling_buttons(cluster_type))
 
 
