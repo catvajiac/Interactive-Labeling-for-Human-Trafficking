@@ -5,6 +5,16 @@ import draw, utils
 import SessionState
 
 
+def gen_landing_page_content(state, df):
+    ''' create landing page
+        :param state:           SessionState object storing cluster data
+        :param df:              pandas DataFrame containing ad data '''
+    st.title('Welcome to the HT labeling app!')
+
+    st.write('TODO: Explain what each label is')
+    st.write('TODO: Show basic stats for df')
+
+
 def gen_page_content(state, df):
     ''' create Streamlit page 
         :param state:           SessionState object storing cluster data
@@ -102,8 +112,9 @@ file_path = st.text_input("Please specify the path of input file")
 
 try:
     if not os.path.exists(file_path):
-        st.warning("The file does not exist, displaying default dataset.")
-        st.warning("If you would like to use your own dataset, please specify the path again.")
+        if file_path: # only show warning if user already tried to input file path
+            st.warning("The file does not exist, displaying default dataset.")
+            st.warning("If you would like to use your own dataset, please specify the path again.")
         file_path = default_file_path
 except:
     st.warning("Path not correct. Please spcecify a path again.")
@@ -120,4 +131,12 @@ with st.spinner('Processing data...'):
             utils.filename_stub(filename), df, columns)
         state.gen_clusters = utils.gen_ccs(graph)
 
-gen_page_content(state, df)
+st.sidebar.title('Navigation')
+
+page_opts = ('Landing page', 'Labeling page')
+choose_page = st.sidebar.radio('Go to', page_opts)
+
+if choose_page == page_opts[0]:
+    gen_landing_page_content(state, df)
+else:
+    gen_page_content(state, df)
