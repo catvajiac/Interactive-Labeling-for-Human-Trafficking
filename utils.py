@@ -1,4 +1,5 @@
 import functools
+from altair.utils.core import infer_dtype
 import networkx as nx
 import numpy as np
 import os, sys
@@ -16,12 +17,12 @@ from annotated_text import annotated_text
 ### Params
 
 BY_CLUSTER_PARAMS = ({
-    'groupby': '# clusters per day',
-    'sortby':  '# ads per day' 
+    'groupby': '# clusters',
+    'sortby':  '# ads' 
 }, {
-    'y': '# ads per day',
-    'facet': '# clusters per day:N',
-    'tooltip': ['days', '# ads per day'],
+    'y': '# ads',
+    'facet': '# clusters:N',
+    'tooltip': ['days', '# ads'],
 })
 
 BY_METADATA_PARAMS = ({
@@ -55,7 +56,7 @@ def read_csv(filename, keep_cols=[], rename_cols={}):
 
 
 @st.cache(hash_funcs={types.GeneratorType: id}, show_spinner=False)
-def get_subdf(df, state, date_col='date_posted'):
+def get_subdf(df, state, date_col='day_posted'):
     ''' get subset of DataFrame based on state.cluster, do location & date processing
         :param df:          DataFrame to take subset of
         :param state:       SessionState object, state.cluster shows subset to take
@@ -74,6 +75,27 @@ def get_subdf(df, state, date_col='date_posted'):
     subdf[date_col] = subdf[date_col].dt.normalize()
 
     return subdf
+
+
+#@st.cache(show_spinner=False)
+def pre_process_df(df, filename, date_col='day_posted', use_cache=True):
+    clean_filename = './data/{}-cleaned.csv'.format(os.path.splitext(os.path.basename(filename))[0])
+    if use_cache and os.path.exists(clean_filename):
+        copy_df = pd.read_csv(clean_filename)
+        copy_df['days'] = pd.to_datetime(copy_df.days, infer_datetime_format=True)
+        return copy_df
+
+    copy_df = df.copy()
+    copy_df['location'] = [prettify_location(*tup) for tup in df[['city_id', 'country_id']].values]
+
+    days = pd.to_datetime(copy_df[date_col], infer_datetime_format=True)
+    copy_df['days'] = days.dt.tz_localize('UTC', ambiguous=True)
+
+    copy_df = gen_locations(copy_df)
+
+    copy_df.to_csv(clean_filename, index=False)
+
+    return copy_df
 
 
 @st.cache#(show_spinner=False)
@@ -116,7 +138,10 @@ def basic_stats(df, cols, cluster_label='LSH label'):
     metadata['# ads'] = [len(df), '--']
     metadata['# clusters'] = [len(df[cluster_label].unique()), '--']
 
-    return pd.DataFrame(metadata, index=['Raw Count', 'Unique Count']).T
+    return pd.DataFrame(
+        metadata,
+        index=['Raw Count', 'Unique Count']
+    ).T
 
 
 @st.cache
@@ -213,7 +238,7 @@ def extract_field_dates(df, col_name, date_col):
 
     df = df.dropna()
     if not len(df):
-        return pd.DataFrame(columns=['metadata', 'date_posted', 'count', 'type'])
+        return pd.DataFrame(columns=['metadata', 'day_posted', 'count', 'type'])
 
     get_data = lambda row: [(val, row[date_col]) for val in str(row[col_name]).split(';')]
     concat_reduce = lambda data: functools.reduce(lambda x, y: x + y, data)
@@ -230,8 +255,8 @@ def extract_field_dates(df, col_name, date_col):
     #return pd.DataFrame(np.concatenate(df.apply(get_data, axis=1)), columns=df.columns)
 
 
-@st.cache#(show_spinner=False)
-def cluster_feature_extract(df, cluster_label='LSH label', date_col='date_posted', loc_col='city_id'):
+#@st.cache#(show_spinner=False)
+def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_col='city_id'):
     ''' extract important time-based features for a particular cluster
         :param df:          Pandas DataFrame representing one meta-cluster
         :param date_col:    column from DataFrame representing time data
@@ -242,36 +267,43 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='date_posted
 
     agg_dict = {name: total for name in ('ad_id', 'city_id', 'email', 'image_id')}
     rename_dict = {
-        'ad_id': '# ads per day',
-        'city_id': '# locations per day',
-        'email': '# email accounts per day',
-        'image_id': '# images per day',
-        'LSH label': '# clusters per day',
-        'social': '# social media tags per day',
-        'date_posted': 'days'
+        'ad_id': '# ads',
+        'city_id': '# locations',
+        'email': '# email accounts',
+        'image_id': '# images',
+        'LSH label': '# clusters',
+        'social': '# social media tags',
+        'day_posted': 'days'
     }
 
     by_cluster_df = df.groupby(
         [date_col, cluster_label],
         as_index=False,
         sort=False
-    ).agg(agg_dict)
-
-    agg_dict['LSH label'] = 'count'
-
-    total_df = by_cluster_df.groupby(
-        [date_col],
-        as_index=False,
-        sort=False
-    ).agg(agg_dict)
+    ).agg(
+        agg_dict
+    ).rename(
+        columns=rename_dict
+    )
 
     dfs = []
     for metadata in ('email', 'image_id', 'social', 'phone'):
-        dfs.append(extract_field_dates(df[[metadata, date_col]], metadata, date_col))
+        subdf = df.copy()[[metadata, 'days', 'LSH label']].dropna()
+        subdf['type'] = metadata
+        subdf[metadata] = subdf[metadata].apply(lambda x: str(x).split(';'))
+        subdf = subdf.rename(columns={metadata: 'metadata'})
+        #st.write(subdf, metadata in subdf)
+        dfs.append(subdf.explode('metadata'))
 
-    metadata_df = pd.concat(dfs).rename(columns={date_col: 'days'})
+    metadata_dict = pd.concat(dfs).groupby(
+        [date_col, 'metadata', 'type'],
+        as_index=False,
+        sort=False
+    )['LSH label'].count().reset_index().rename(
+        columns={'LSH label': 'count'}
+    )
 
-    return by_cluster_df.rename(columns=rename_dict), total_df.rename(columns=rename_dict), metadata_df
+    return by_cluster_df, metadata_dict
 
 
 ### Graph related utils
@@ -316,13 +348,9 @@ def gen_ccs(graph):
 
     #components = sorted(nx.connected_components(graph), reverse=True, key=len)
     components = nx.connected_components(graph)
-    index = 0
     for component in components:
-        if len(component) < 5:
-            continue
         print('# clusters', len(component))
-        yield index, component
-        index += 1
+        yield component
 
 
 ### Text annotation utils

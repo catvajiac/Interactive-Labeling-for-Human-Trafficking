@@ -8,6 +8,8 @@ from itertools import chain, product
 from vega_datasets import data
 
 import utils
+alt.data_transformers.enable('csv')
+
 
 PERSON = (
     "M1.7 -1.7h-0.8c0.3 -0.2 0.6 -0.5 0.6 -0.9c0 -0.6 "
@@ -57,11 +59,16 @@ def graph(graph, pos):
     )
 
 
-def templates(directory):
+def templates(directory, df, is_infoshield):
     ''' draw annotated text
         :param directory:   directory to look for InfoShield templates in
         :return:            altair annotated text '''
-    to_write = utils.get_all_template_text(directory)
+
+    if is_infoshield:
+        to_write = utils.get_all_template_text(directory)
+    else:
+        subdf = df.iloc[0:5]
+        to_write = '<br><br>'.join(['{}:<br> {}'.format(*tup) for tup in subdf[['title', 'body']].values])
 
     utils.annotated_text(*to_write,
         scrolling=True,
@@ -73,10 +80,11 @@ def map(df):
     ''' generate map with ad location data
         :param df:  Pandas DataFrame with latitude, longitude, and count data
         :return:    altair map with ad counts displayed '''
+    df = df[(df.lat != 1) | (df.lon != 1)]
     center, scale = utils.get_center_scale(df.lat, df.lon)
 
     countries = alt.topo_feature(data.world_110m.url, 'countries')
-    base = alt.Chart(countries).mark_geoshape(
+    base = alt.Chart(countries, width='container').mark_geoshape(
         fill='white',
         stroke='#DDDDDD'
     ).properties(
@@ -86,7 +94,7 @@ def map(df):
 
     agg_df = utils.aggregate_locations(df)
 
-    scatter = alt.Chart(agg_df).mark_circle(
+    scatter = alt.Chart(agg_df, width='container').mark_circle(
         color='#ff7f0e',
         fillOpacity=.5,
     ).encode(
@@ -127,7 +135,7 @@ def bubble_chart(df, y, facet, tooltip):
     )
 
 
-def strip_plot(df, y, facet, tooltip, color_zeros=False):
+def strip_plot(df, y, facet, tooltip, color_zeros=False, sort=None, show_labels=True):
     ''' create strip plot with heatmap
         :param df:      Pandas DataFrame to display
         :param y:       column of DataFrame to use for bubble size
@@ -145,8 +153,8 @@ def strip_plot(df, y, facet, tooltip, color_zeros=False):
         df = pd.concat([df, mini_df])
 
     chart = alt.Chart(df).mark_tick(binSpacing=0, thickness=6).encode(
-        x=alt.X('days:T', axis=alt.Axis(grid=False), scale=alt.Scale(domain=[min(date_range), max(date_range)])),
-        y=alt.Y(facet, axis=alt.Axis(grid=False, labels=True), title=None),
+        x=alt.X('{}:T'.format('days'), axis=alt.Axis(grid=False), scale=alt.Scale(domain=[min(date_range), max(date_range)])),
+        y=alt.Y(facet, axis=alt.Axis(grid=False, labels=show_labels), title=None, sort=sort),
         color=alt.Color(y, scale=alt.Scale(scheme='purplered', type='sqrt')),
         tooltip=tooltip,
     ).properties(
@@ -206,4 +214,95 @@ def labeling_buttons(title):
         brush
     ).configure_title(
         fontSize=16
+    )
+
+
+def bar_chart(data, column):
+    ''' create bar charts for displaying categorical data
+        :param data:    data from which to display
+        :param column:  column on which to create histogram
+        :return:        altair bar plot '''
+
+    return alt.Chart(data).mark_area().encode(
+         x=alt.X(column, sort='-y', axis=alt.Axis(labels=False, grid=False)),
+         y=alt.Y('count():Q', axis=alt.Axis(grid=False), title='Clusters (ordered by size)'),
+         tooltip=[alt.Tooltip('count()', title='Number of ads in cluster')]
+    ).properties(
+        width=600,
+        height=400
+    )
+
+
+def timeline(data, date_col='day_posted:T'):
+    ''' create timeline for # ads each day
+        :param data:    data from which to display
+        :return:        altair timeline '''
+
+    date_s = date_col.split(':')[0]
+
+    #TODO: figure out how to calculate # of unique locations per day
+
+    return alt.Chart(data).transform_aggregate(
+        num_ads='count()',
+        groupby=[date_s]
+    ).transform_filter(
+        alt.datum.num_ads > 1
+    ).mark_point().encode(
+        x=alt.X(date_col, title='Day', axis=alt.Axis(grid=False)),
+        y=alt.Y('num_ads:Q', title='Number of ads', axis=alt.Axis(grid=False)),
+        #tooltip=[alt.Tooltip(date_col, title='Day'), alt.Tooltip('num_ads:Q', title='Number of ads')]
+    ).properties(
+        width=700,
+        height=400
+    )
+
+def location_timeline(data, date_col='day_posted:T'):
+    ''' create timeline for # unique locations each day
+        :param data:    data from which to display
+        :return:        altair timeline '''
+
+    date_s = date_col.split(':')[0]
+
+    return alt.Chart(data).transform_aggregate(
+        num_locs='distinct(city_id)',
+        groupby=[date_s]
+    ).mark_point().encode(
+        x=alt.X(date_col, title='Day', axis=alt.Axis(grid=False)),
+        y=alt.Y('num_locs:Q', title='Number of locations', axis=alt.Axis(grid=False)),
+        tooltip=[alt.Tooltip(date_col, title='Day'), alt.Tooltip('num_locs:Q', title='Number of locations')]
+    ).properties(
+        width=700,
+        height=400
+    )
+
+
+def contact_bar_chart(data, col):
+    ''' create bar chart for metadata information
+        :param data:    data from which to display
+        :param col:     column name for metadata
+        :return:        altair bar chart '''
+
+    return alt.Chart(data).mark_bar().encode(
+        x=alt.X('size:Q'),
+        y=alt.Y(col, sort='-x')
+    ).properties(
+        width=700,
+        height=400
+    )
+
+import streamlit as st
+
+def stream_chart(df, columns):
+    selection = alt.selection_multi(fields=['series'], bind='legend')
+
+    return alt.Chart(df).mark_area().encode(
+        x=alt.X('days', axis=alt.Axis(grid=False)),
+        y=alt.Y('value:Q', stack='center', axis=None),
+        color=alt.Color('variable:N'),
+        tooltip=['days', 'value', 'variable']
+    ).properties(
+        width=650,
+        height=400
+    ).add_selection(
+        selection
     )
