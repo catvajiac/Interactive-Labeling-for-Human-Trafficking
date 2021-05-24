@@ -172,10 +172,12 @@ def gen_page_content(state, df):
     # display features over time, aggregated forall clusters
     with mid_col:
         st.subheader('Timeline of cluster activity and metadata usage over all clusters.')
-        feature_cols = [f for f in cluster_features if f != 'days']
+        feature_cols = [f for f in cluster_features if f not in ('days')]
         features = cluster_features.groupby('days', as_index=False).agg('sum')
         melt = pd.melt(features, id_vars=['days'], value_vars=feature_cols)
+        #feature_cols.remove('# ads')
         st.altair_chart(draw.stream_chart(melt, feature_cols), use_container_width=True)
+        #st.altair_chart(draw.stream_chart(melt, ['# ads'], height=100), use_container_width=True)
 
     # show map of ad locations
     with right_col:
@@ -200,7 +202,7 @@ def gen_page_content(state, df):
     # meta-cluster stats table TODO: figure out how to replace this info
     #with right_col:
     #    st.subheader('Meta-Cluster Stats')
-    #    st.table(utils.basic_stats(subdf[columns + ['LSH label']], columns))
+    #st.table(utils.basic_stats(subdf[columns + ['LSH label']], columns))
 
 
     # labeling table

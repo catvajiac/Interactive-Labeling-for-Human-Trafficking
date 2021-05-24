@@ -291,17 +291,84 @@ def contact_bar_chart(data, col):
         height=400
     )
 
-def stream_chart(df, columns):
-    selection = alt.selection_multi(fields=['series'], bind='legend')
-
-    return alt.Chart(df).mark_area().encode(
-        x=alt.X('days', axis=alt.Axis(grid=False)),
-        y=alt.Y('value:Q', stack='center', axis=None),
-        color=alt.Color('variable:N'),
-        tooltip=['days', 'value', 'variable']
-    ).properties(
-        width=650,
-        height=400
-    ).add_selection(
-        selection
+def stream_chart(df, columns, height=300):
+    # Create a selection that chooses the nearest point & selects based on x-value
+    nearest = alt.selection_single(
+        nearest=True,
+        on='mouseover',
+       fields=['days'],
+       empty='none'
     )
+
+    # The basic line
+    line = alt.Chart(df).mark_line(interpolate='natural').encode(
+        x=alt.X('days:T', axis=alt.Axis(grid=False, labels=False)),
+        y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
+        color='variable:N'
+    ).transform_filter(
+        alt.datum.variable != '# ads'
+    )
+
+    # Transparent selectors across the chart. This is what tells us
+    # the x-value of the cursor
+    selectors = alt.Chart(df).mark_point().encode(
+        x='days:T',
+        opacity=alt.value(0),
+    ).add_selection(
+        nearest
+    )
+
+    # Draw points on the line, and highlight based on selection
+    points = line.mark_point().encode(
+        opacity=alt.condition(nearest, alt.value(1), alt.value(0))
+    )
+
+    # Draw text labels near the points, and highlight based on selection
+    text = line.mark_text(align='left', dx=5, dy=-5).encode(
+        text=alt.condition(nearest, 'value:Q', alt.value(' '))
+    )
+
+    # Draw a rule at the location of the selection
+    rules = alt.Chart(df).mark_rule(color='gray').encode(
+        x='days:T',
+    ).transform_filter(
+        nearest
+    )
+
+    # Put the five layers into a chart and bind the data
+    c1 = alt.layer(
+        line, selectors, points, rules, text
+    ).properties(
+        width=550,
+        height=250
+    )
+
+    # The basic line
+    ad_line = alt.Chart(df).mark_line(interpolate='natural').encode(
+        x=alt.X('days:T', axis=alt.Axis(grid=False)),
+        y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
+        color='variable:N'
+    ).transform_filter(
+        alt.datum.variable == '# ads'
+    )
+
+    # Draw points on the line, and highlight based on selection
+    ad_points = ad_line.mark_point().encode(
+        opacity=alt.condition(nearest, alt.value(1), alt.value(0))
+    )
+
+    # Draw text labels near the points, and highlight based on selection
+    ad_text = ad_line.mark_text(align='left', dx=5, dy=-5).encode(
+        text=alt.condition(nearest, 'value:Q', alt.value(' '))
+    )
+
+    # Put the five layers into a chart and bind the data
+    c2 = alt.layer(
+        ad_line, selectors, ad_points, rules, ad_text
+    ).properties(
+        width=550,
+        height=150
+    )
+
+
+    return alt.vconcat(c1, c2)
