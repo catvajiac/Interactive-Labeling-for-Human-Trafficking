@@ -82,7 +82,7 @@ def gen_landing_page_content(state, df):
     )
 
     col2.altair_chart(
-        draw.strip_plot(subdf, 'size:Q', 'location', ['location', 'days', 'size']),
+        draw.strip_plot(subdf, 'size:Q', 'location', ['location', 'days', 'size'], colorscheme='tealblues'),
         use_container_width=True
     )
 
@@ -111,7 +111,7 @@ def gen_landing_page_content(state, df):
             st.altair_chart(draw.contact_bar_chart(meta_df, metadata), use_container_width=True)
         with col2:
             st.altair_chart(
-                draw.strip_plot(subdf, 'size:Q', metadata, [], sort=meta_df[metadata].values, show_labels=False),
+                draw.strip_plot(subdf, 'size:Q', metadata, [], sort=meta_df[metadata].values, show_labels=False, colorscheme='tealblues'),
                 use_container_width=True
             )
 
@@ -126,7 +126,7 @@ def gen_page_content(state, df):
     ''' create Streamlit page 
         :param state:           SessionState object storing cluster data
         :param df:              pandas DataFrame containing ad data '''
-    first_col, _, _, _, last_col = st.beta_columns(5)
+    first_col, last_col = st.beta_columns([4, 1])
     with last_col:
         if st.button('View next cluster'):
             try:
@@ -140,7 +140,6 @@ def gen_page_content(state, df):
 
     # on first iteration, before button press
     if state.is_first:
-        #next(state.gen_clusters) # TODO: change once scalable
         state.cluster = next(state.gen_clusters)
         state.index += 1
         state.is_first = False
@@ -155,22 +154,24 @@ def gen_page_content(state, df):
     subdf = utils.get_subdf(df, state)
     cluster_features, metadata_features = utils.cluster_feature_extract(subdf)
 
-    left_col, right_col = st.beta_columns((1.25, 3))
+    left_col, _, right_col = st.beta_columns((1.25, 0.1, 3))
 
     # strip plot with heatmap
     with left_col:
-        #st.write(utils.BUTTON_STYLE, unsafe_allow_html=True) # allows side-by-side button opts
-        data_view = st.selectbox('Which view would you like to see?', ['By cluster', 'By metadata'])
+        st.subheader('Cluster activity & metadata usage over time.')
+        data_view = st.selectbox('Which view would you like to see?',\
+             ['Cluster activity: # ads per top clusters per day', 'Metadata usage: # clusters using top metadata per day'])
 
-        top_n_params, chart_params = utils.BY_CLUSTER_PARAMS if data_view == 'By cluster' \
+        top_n_params, chart_params = utils.BY_CLUSTER_PARAMS if data_view.startswith('Cluster') \
             else utils.BY_METADATA_PARAMS
-        plot_df = cluster_features if data_view == 'By cluster' else metadata_features
+        plot_df = cluster_features if data_view.startswith('Cluster') else metadata_features
 
         top_df = utils.top_n(plot_df, **top_n_params)
         st.altair_chart(draw.strip_plot(top_df, **chart_params), use_container_width=True)
 
     # template / ad text visualization
     with right_col:
+        st.subheader('Ad text, organized by cluster')
         is_infoshield = True
         label = subdf['LSH label'].value_counts().idxmax()
         start_path = '../InfoShield/results/{}'.format(label)
@@ -190,7 +191,7 @@ def gen_page_content(state, df):
 
     # display features over time, aggregated forall clusters
     with mid_col:
-        # changed features -> cluster_features
+        st.subheader('Timeline of cluster activity and metadata usage over all clusters.')
         feature_cols = [f for f in cluster_features if f != 'days']
         features = cluster_features.groupby('days', as_index=False).agg('sum')
         melt = pd.melt(features, id_vars=['days'], value_vars=feature_cols)
@@ -198,13 +199,14 @@ def gen_page_content(state, df):
 
     # show map of ad locations
     with right_col:
+        st.subheader('Geographical spread of advertisements.')
         st.write(draw.map(subdf[['ad_id', 'lat', 'lon', 'location']]))
 
     # Number input boxes take up the whole column space -- this makes them shorter
     st.subheader('Labeling: On a scale of 1 (very unlikely) to 5 (very likely), how likely is this to be...')
     label_cols = st.beta_columns(4)
 
-    for col, cluster_type in zip(label_cols, ('Trafficking', 'Spam', 'Scam', 'Massage parlor')):
+    for col, cluster_type in zip(label_cols, ('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign')):
         col.write(draw.labeling_buttons(cluster_type))
 
 
@@ -220,7 +222,8 @@ state_params = {
 state = SessionState.get(**state_params)
 
 default_file_path = './data/synthetic_data.csv'
-file_path = st.text_input("Please specify the path of input file")
+#file_path = st.text_input("Please specify the path of input file")
+file_path = ''
 
 try:
     if not os.path.exists(file_path):

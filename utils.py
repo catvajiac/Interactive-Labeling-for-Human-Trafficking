@@ -273,7 +273,6 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
         'image_id': '# images',
         'LSH label': '# clusters',
         'social': '# social media tags',
-        'day_posted': 'days'
     }
 
     by_cluster_df = df.groupby(
@@ -286,11 +285,20 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
         columns=rename_dict
     )
 
+    split_prefix = lambda prefix, cell: [prefix+s for s in str(cell).split(';')]
+
+    prefix_dict = {
+        'email': '',
+        'image_id': 'img-',
+        'social': '@',
+        'phone': ''
+    }
+
     dfs = []
     for metadata in ('email', 'image_id', 'social', 'phone'):
         subdf = df.copy()[[metadata, 'days', 'LSH label']].dropna()
         subdf['type'] = metadata
-        subdf[metadata] = subdf[metadata].apply(lambda x: str(x).split(';'))
+        subdf[metadata] = subdf[metadata].apply(lambda x: split_prefix(prefix_dict[metadata], x))
         subdf = subdf.rename(columns={metadata: 'metadata'})
         #st.write(subdf, metadata in subdf)
         dfs.append(subdf.explode('metadata'))

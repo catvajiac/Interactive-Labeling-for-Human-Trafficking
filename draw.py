@@ -135,7 +135,7 @@ def bubble_chart(df, y, facet, tooltip):
     )
 
 
-def strip_plot(df, y, facet, tooltip, color_zeros=False, sort=None, show_labels=True):
+def strip_plot(df, y, facet, tooltip, color_zeros=False, sort=None, show_labels=True, colorscheme='purplered'):
     ''' create strip plot with heatmap
         :param df:      Pandas DataFrame to display
         :param y:       column of DataFrame to use for bubble size
@@ -155,7 +155,7 @@ def strip_plot(df, y, facet, tooltip, color_zeros=False, sort=None, show_labels=
     chart = alt.Chart(df).mark_tick(binSpacing=0, thickness=6).encode(
         x=alt.X('{}:T'.format('days'), axis=alt.Axis(grid=False), scale=alt.Scale(domain=[min(date_range), max(date_range)])),
         y=alt.Y(facet, axis=alt.Axis(grid=False, labels=show_labels), title=None, sort=sort),
-        color=alt.Color(y, scale=alt.Scale(scheme='purplered', type='sqrt')),
+        color=alt.Color(y, scale=alt.Scale(scheme=colorscheme, type='sqrt')),
         tooltip=tooltip,
     ).properties(
         width=650,
@@ -284,13 +284,12 @@ def contact_bar_chart(data, col):
 
     return alt.Chart(data).mark_bar().encode(
         x=alt.X('size:Q'),
-        y=alt.Y(col, sort='-x')
+        y=alt.Y(col, sort='-x'),
+        color=alt.value('#40bcc9')
     ).properties(
         width=700,
         height=400
     )
-
-import streamlit as st
 
 def stream_chart(df, columns):
     selection = alt.selection_multi(fields=['series'], bind='legend')
