@@ -128,7 +128,7 @@ def gen_page_content(state, df):
         :param df:              pandas DataFrame containing ad data '''
     first_col, last_col = st.beta_columns([4, 1])
     with last_col:
-        if st.button('View next cluster'):
+        if st.button('View next meta-cluster'):
             try:
                 state.cluster = next(state.gen_clusters)
                 #utils.write_labels(state)
@@ -154,40 +154,20 @@ def gen_page_content(state, df):
     subdf = utils.get_subdf(df, state)
     cluster_features, metadata_features = utils.cluster_feature_extract(subdf)
 
-    left_col, _, right_col = st.beta_columns((1.25, 0.1, 3))
+    left_col, _, mid_col, _, right_col = st.beta_columns((1, 0.1, 1, 0.1, 1))
 
     # strip plot with heatmap
     with left_col:
-        st.subheader('Cluster activity & metadata usage over time.')
+        st.subheader('Meta-Cluster activity & metadata usage over time, split by micro-cluster.')
         data_view = st.selectbox('Which view would you like to see?',\
-             ['Cluster activity: # ads per top clusters per day', 'Metadata usage: # clusters using top metadata per day'])
+             ['Meta-Cluster activity: # ads per top micro-clusters per day', 'Metadata usage: # clusters using top metadata per day'])
 
-        top_n_params, chart_params = utils.BY_CLUSTER_PARAMS if data_view.startswith('Cluster') \
+        top_n_params, chart_params = utils.BY_CLUSTER_PARAMS if data_view.startswith('Meta-Cluster') \
             else utils.BY_METADATA_PARAMS
-        plot_df = cluster_features if data_view.startswith('Cluster') else metadata_features
+        plot_df = cluster_features if data_view.startswith('Meta-Cluster') else metadata_features
 
         top_df = utils.top_n(plot_df, **top_n_params)
         st.altair_chart(draw.strip_plot(top_df, **chart_params), use_container_width=True)
-
-    # template / ad text visualization
-    with right_col:
-        st.subheader('Ad text, organized by cluster')
-        is_infoshield = True
-        label = subdf['LSH label'].value_counts().idxmax()
-        start_path = '../InfoShield/results/{}'.format(label)
-        if not os.path.exists(start_path):
-            st.warning('We cannot find InfoShield results for this data, so only the ad text is displayed.')
-            is_infoshield = False
-        draw.templates(start_path, df, is_infoshield)
-
-
-    # hacky way to get padding between columns
-    left_col, _, mid_col, _, right_col = st.beta_columns((1, 0.1, 1.5, 0.1, 2))
-
-    # meta-cluster stats table
-    with left_col:
-        st.subheader('Meta-Cluster Stats')
-        st.table(utils.basic_stats(subdf[columns + ['LSH label']], columns))
 
     # display features over time, aggregated forall clusters
     with mid_col:
@@ -202,12 +182,32 @@ def gen_page_content(state, df):
         st.subheader('Geographical spread of advertisements.')
         st.write(draw.map(subdf[['ad_id', 'lat', 'lon', 'location']]))
 
-    # Number input boxes take up the whole column space -- this makes them shorter
-    st.subheader('Labeling: On a scale of 1 (very unlikely) to 5 (very likely), how likely is this to be...')
-    label_cols = st.beta_columns(4)
 
-    for col, cluster_type in zip(label_cols, ('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign')):
-        col.write(draw.labeling_buttons(cluster_type))
+    # hacky way to get padding between columns
+    left_col, _, right_col = st.beta_columns((4, 0.1, 1))
+
+    # template / ad text visualization
+    with left_col:
+        st.subheader('Ad text, organized by cluster')
+        is_infoshield = True
+        label = subdf['LSH label'].value_counts().idxmax()
+        start_path = '../InfoShield/results/{}'.format(label)
+        if not os.path.exists(start_path):
+            st.warning('We cannot find InfoShield results for this data, so only the ad text is displayed.')
+            is_infoshield = False
+        draw.templates(start_path, df, is_infoshield)
+
+    # meta-cluster stats table TODO: figure out how to replace this info
+    #with right_col:
+    #    st.subheader('Meta-Cluster Stats')
+    #    st.table(utils.basic_stats(subdf[columns + ['LSH label']], columns))
+
+
+    # labeling table
+    with right_col:
+        st.subheader('Labeling: On a scale of 1 (very unlikely) to 5 (very likely), how likely is this to be...')
+        for cluster_type in ('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign'):
+            st.write(draw.labeling_buttons(cluster_type))
 
 
 # Generate content for app

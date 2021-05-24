@@ -88,7 +88,7 @@ def map(df):
         fill='white',
         stroke='#DDDDDD'
     ).properties(
-        width=900,
+        width=700,
         height=400
     )
 
@@ -206,7 +206,7 @@ def labeling_buttons(title):
         tooltip=['label']
     ).properties(
         width=400,
-        height=100,
+        height=75,
         title=title
     ).configure_view(
         strokeWidth=0
