@@ -98,7 +98,7 @@ def map(df):
     agg_df = utils.aggregate_locations(df)
 
     scatter = alt.Chart(agg_df, width='container').mark_circle(
-        color='#ff7f0e',
+        color=utils.LOCATION_COLOR,
         fillOpacity=.5,
     ).encode(
         size=alt.Size('count:Q', scale=alt.Scale(range=[100, 500])),
@@ -147,7 +147,7 @@ def bubble_chart(df, y, facet, tooltip):
     )
 
 
-def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='purplered'):
+def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='blues'):
     ''' create strip plot with heatmap
         :param df:      Pandas DataFrame to display
         :param y:       column of DataFrame to use for bubble size

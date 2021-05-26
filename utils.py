@@ -18,6 +18,10 @@ from collections import defaultdict
 BIG_FONT_SIZE = 24
 SMALL_FONT_SIZE = 18
 
+LOCATION_COLOR = '#2ca02cff'
+AD_COLOR = '1f77b4ff'
+
+
 
 BY_CLUSTER_PARAMS = ({
     'groupby': '# clusters',
