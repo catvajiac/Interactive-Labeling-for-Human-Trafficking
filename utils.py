@@ -7,11 +7,10 @@ import pandas as pd
 import pickle as pkl
 import streamlit as st
 import types
+
+from annotated_text import annotation
 from collections import defaultdict
 
-from collections import defaultdict
-
-from annotated_text import annotated_text
 
 
 ### Params
@@ -382,7 +381,7 @@ def gen_ccs(graph):
 
 
 ### Text annotation utils
-@st.cache
+#@st.cache(hash_funcs={types.GeneratorType: id}, show_spinner=False)
 def get_all_template_text(directory):
     ''' check a directory for all possible templates and annotate them
         :param directory:   directory to check for subdirs containing templates
@@ -404,7 +403,7 @@ def get_all_template_text(directory):
 
     return to_write
 
-@st.cache
+#@st.cache(hash_funcs={types.GeneratorType: id}, show_spinner=False)
 def get_template_text(template, ads, i):
     ''' annotate a particular template with relevant ads as calculated from InfoShield
         :param template:    list of tokens in template
@@ -419,10 +418,10 @@ def get_template_text(template, ads, i):
         3:  ('ins', '#afa'),
     }
 
-    to_write = ['Template #{}: '.format(i), ' '.join(template)]
+    to_write = ['Template #{}: '.format(i), ' '.join(template), '<br>']
 
     for ad_index, ad in enumerate(ads):
-        to_write.append('<br>Ad #{}'.format(ad_index+1))
+        to_write.append('Ad #{}'.format(ad_index+1))
         prev_type = None 
         for color_i, token in ad:
             curr_type, color = index_to_type[color_i]
@@ -436,7 +435,21 @@ def get_template_text(template, ads, i):
 
             to_write.append((token, curr_type, color))
 
-    return to_write
+        to_write.append('<br>')
+
+    # now create annotation objects. Couldn't before since we need to access prev_type, etc
+    annotated = []
+    for tup in to_write:
+        if tup == '<br>':
+            annotated.append(tup)
+        if type(tup) == str:
+            annotated.append(annotation(tup, background_color='#ffffff', font_size='{}px'.format(BIG_FONT_SIZE)))
+            continue
+
+        token, curr_type, color = tup
+        annotated.append(annotation(token, curr_type, background_color=color, font_size='{}px'.format(BIG_FONT_SIZE)))
+
+    return annotated
 
 
 #def write_labels(filename, meta_cluster_label, cluster_labels, labels):

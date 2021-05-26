@@ -194,10 +194,11 @@ def gen_page_content(state, df):
 
     # template / ad text visualization
     with left_col:
-        st.header('Ad text, organized by cluster')
+        st.header('Ad text, organized by micro-cluster')
         is_infoshield = True
         label = subdf['LSH label'].value_counts().idxmax()
         start_path = '../InfoShield/results/{}'.format(label)
+        start_path = './data/example.pkl'
         if not os.path.exists(start_path):
             st.warning('We cannot find InfoShield results for this data, so only the ad text is displayed.')
             is_infoshield = False
