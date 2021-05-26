@@ -8,6 +8,8 @@ from itertools import chain, product
 from vega_datasets import data
 
 import utils
+from annotated_text import annotated_text, annotation
+
 alt.data_transformers.enable('csv')
 
 
@@ -68,9 +70,10 @@ def templates(directory, df, is_infoshield):
         to_write = utils.get_all_template_text(directory)
     else:
         subdf = df.iloc[0:5]
-        to_write = '<br><br>'.join(['{}:<br> {}'.format(*tup) for tup in subdf[['title', 'body']].values])
+        to_write = ['{}:<br>{}'.format(*tup) for tup in subdf[['title', 'body']].values]
+        to_write = [annotation(text + '<br><br>', background_color='#ffffff', font_size='20px') for text in to_write]
 
-    utils.annotated_text(*to_write,
+    annotated_text(*to_write,
         scrolling=True,
         height=400
     )
@@ -108,6 +111,15 @@ def map(df):
         'equirectangular',
         scale=scale,
         center=center
+    ).configure_axis(
+        labelFontSize=utils.SMALL_FONT_SIZE,
+        titleFontSize=utils.BIG_FONT_SIZE,
+    ).configure_legend(
+        gradientLength=275,
+        labelFontSize=utils.SMALL_FONT_SIZE,
+        titleFontSize=utils.BIG_FONT_SIZE,
+    ).configure_axisX(
+        labelAlign='left'
     )
 
 
@@ -135,7 +147,7 @@ def bubble_chart(df, y, facet, tooltip):
     )
 
 
-def strip_plot(df, y, facet, tooltip, color_zeros=False, sort=None, show_labels=True, colorscheme='purplered'):
+def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='purplered'):
     ''' create strip plot with heatmap
         :param df:      Pandas DataFrame to display
         :param y:       column of DataFrame to use for bubble size
@@ -143,45 +155,35 @@ def strip_plot(df, y, facet, tooltip, color_zeros=False, sort=None, show_labels=
         :param tooltip: list of DataFrame columns to include in tooltip
         :return:        altair strip plot '''
 
-    delta = datetime.timedelta(days=1)
-    date_range = np.arange(min(df.days) - delta, max(df.days) + 2*delta, delta)
-    facet_s = facet.split(':')[0]
+    min_date = min(df.days) - datetime.timedelta(days=1)
 
-    label = df[facet_s].values[0]
-    if color_zeros:
-        mini_df = pd.DataFrame([{'days': d, y: 0, facet_s: label} for d in date_range[1:-1] if d not in df.days.unique()])
-        df = pd.concat([df, mini_df])
-
-    chart = alt.Chart(df).mark_tick(binSpacing=0, thickness=6).encode(
-        x=alt.X('{}:T'.format('days'), axis=alt.Axis(grid=False), scale=alt.Scale(domain=[min(date_range), max(date_range)])),
-        y=alt.Y(facet, axis=alt.Axis(grid=False, labels=show_labels), title=None, sort=sort),
+    return alt.Chart(df).mark_tick(thickness=20).encode(
+        x=alt.X('days:T',
+            axis=alt.Axis(grid=False, tickMinStep=7),
+            scale=alt.Scale(domain=[min_date, max(df.days)]
+        )),
+        y=alt.Y(facet,
+            axis=alt.Axis(grid=False, labels=show_labels),
+            title='Micro-cluster',
+            sort=sort
+        ),
         color=alt.Color(y, scale=alt.Scale(scheme=colorscheme, type='sqrt')),
         tooltip=tooltip,
     ).properties(
         width=650,
-        height=400
+        height=510
     ).configure_view(
         stroke=None
     ).configure_axis(
-        labelFontSize=14,
-        titleFontSize=14
+        labelFontSize=utils.SMALL_FONT_SIZE,
+        titleFontSize=utils.BIG_FONT_SIZE,
     ).configure_legend(
-        gradientLength=325,
-        labelFontSize=14
+        gradientLength=275,
+        labelFontSize=utils.SMALL_FONT_SIZE,
+        titleFontSize=utils.BIG_FONT_SIZE,
     ).configure_axisX(
-        labelAngle=-15
+        labelAlign='left'
     )
-
-    if color_zeros:
-        chart = chart.transform_impute(
-        impute=y,
-        key='days',
-        value=0,
-        keyvals = date_range,
-        groupby=[facet_s]
-    )
-
-    return chart
 
 
 def labeling_buttons(title):
@@ -201,19 +203,19 @@ def labeling_buttons(title):
         shape=alt.ShapeValue(PERSON),
         color=alt.condition(
             alt.datum.id <= brush.id,
-            alt.Color('color:N', scale=None),
-            alt.value('skyblue')),
+            alt.value('#ff3300'),
+            alt.value('gray')),
         tooltip=['label']
     ).properties(
         width=400,
-        height=75,
+        height=80,
         title=title
     ).configure_view(
         strokeWidth=0
     ).add_selection(
         brush
     ).configure_title(
-        fontSize=16
+        fontSize=utils.SMALL_FONT_SIZE
     )
 
 
@@ -256,6 +258,7 @@ def timeline(data, date_col='day_posted:T'):
         height=400
     )
 
+
 def location_timeline(data, date_col='day_posted:T'):
     ''' create timeline for # unique locations each day
         :param data:    data from which to display
@@ -291,7 +294,8 @@ def contact_bar_chart(data, col):
         height=400
     )
 
-def stream_chart(df, columns, height=300):
+
+def stream_chart(df):
     # Create a selection that chooses the nearest point & selects based on x-value
     nearest = alt.selection_single(
         nearest=True,
@@ -302,11 +306,11 @@ def stream_chart(df, columns, height=300):
 
     # The basic line
     line = alt.Chart(df).mark_line(interpolate='natural').encode(
-        x=alt.X('days:T', axis=alt.Axis(grid=False, labels=False)),
+        x=alt.X('days:T', axis=alt.Axis(grid=False, labels=False, title='')),
         y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
-        color='variable:N'
+        color=alt.Color('variable:N', legend=alt.Legend(orient='top'))
     ).transform_filter(
-        alt.datum.variable != '# ads'
+        alt.datum.variable != '# clusters'
     )
 
     # Transparent selectors across the chart. This is what tells us
@@ -340,16 +344,16 @@ def stream_chart(df, columns, height=300):
         line, selectors, points, rules, text
     ).properties(
         width=550,
-        height=250
+        height=200
     )
 
     # The basic line
     ad_line = alt.Chart(df).mark_line(interpolate='natural').encode(
-        x=alt.X('days:T', axis=alt.Axis(grid=False)),
+        x=alt.X('days:T', axis=alt.Axis(grid=False, tickMinStep=7)),
         y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
         color='variable:N'
     ).transform_filter(
-        alt.datum.variable == '# ads'
+        alt.datum.variable == '# clusters'
     )
 
     # Draw points on the line, and highlight based on selection
@@ -367,8 +371,19 @@ def stream_chart(df, columns, height=300):
         ad_line, selectors, ad_points, rules, ad_text
     ).properties(
         width=550,
-        height=150
+        height=100
     )
 
-
-    return alt.vconcat(c1, c2)
+    return alt.vconcat(c1, c2,
+        padding={'top': 5, 'bottom': 5, 'right': 50, 'left': 5}
+    ).configure_axis(
+        labelFontSize=utils.SMALL_FONT_SIZE,
+        titleFontSize=utils.BIG_FONT_SIZE
+    ).configure_legend(
+        gradientLength=275,
+        labelFontSize=utils.SMALL_FONT_SIZE,
+        titleFontSize=utils.BIG_FONT_SIZE,
+    ).configure_axisX(
+        labelAlign='left'
+    )
+    

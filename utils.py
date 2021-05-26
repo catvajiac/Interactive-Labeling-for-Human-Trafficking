@@ -16,6 +16,10 @@ from annotated_text import annotated_text
 
 ### Params
 
+BIG_FONT_SIZE = 24
+SMALL_FONT_SIZE = 18
+
+
 BY_CLUSTER_PARAMS = ({
     'groupby': '# clusters',
     'sortby':  '# ads' 
@@ -23,6 +27,7 @@ BY_CLUSTER_PARAMS = ({
     'y': '# ads',
     'facet': '# clusters:N',
     'tooltip': ['days', '# ads'],
+    'show_labels': False
 })
 
 BY_METADATA_PARAMS = ({
@@ -112,9 +117,27 @@ def extract_field(series):
 
 
 @st.cache
+def pretty_basic_stats(stats):
+    ''' prettify output of basic_stats '''
+    text = []
+    for name, (count, unique) in stats.items():
+        name = name.split()[1]
+        if name == 'clusters':
+            name = 'micro-clusters'
+
+        if unique == '--':
+            text.append('**{}** {}'.format(count, name))
+            continue
+
+        text.append('**{}** total {} (**{}** unique)'.format(count, name, unique))
+
+    return ', '.join(text[:-1]) + ', and ' + text[-1] + '.'
+
+
+@st.cache
 def pretty_s(s):
     ''' prettify a string for display
-        :parram s:  string to prettify
+        :param s:  string to prettify
         :return     string with spaces and plural '''
     return '# {}s'.format(s.replace('_', ' '))
 
@@ -138,14 +161,11 @@ def basic_stats(df, cols, cluster_label='LSH label'):
     metadata['# ads'] = [len(df), '--']
     metadata['# clusters'] = [len(df[cluster_label].unique()), '--']
 
-    return pd.DataFrame(
-        metadata,
-        index=['Raw Count', 'Unique Count']
-    ).T
+    return metadata
 
 
 @st.cache
-def top_n(df, groupby, sortby, n=15):
+def top_n(df, groupby, sortby, n=10):
     ''' get the top n groups from a DataFrame
         :param df:      Pandas DataFrame for one meta-cluster
         :param groupby: column from DataFrame to create groups before aggregation
@@ -269,7 +289,7 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
     rename_dict = {
         'ad_id': '# ads',
         'city_id': '# locations',
-        'email': '# email accounts',
+        'email': '# emails',
         'image_id': '# images',
         'LSH label': '# clusters',
         'social': '# social media tags',
