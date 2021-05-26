@@ -165,7 +165,7 @@ def gen_page_content(state, df):
 
     # strip plot with heatmap
     with left_col:
-        st.header('Meta-Cluster activity over time, split by micro-cluster.')
+        st.header('Activity over time per micro-cluster.')
         #data_view = st.selectbox('Which view would you like to see?',\
         #     ['Meta-Cluster activity: # ads per top micro-clusters per day', 'Metadata usage: # clusters using top metadata per day'])
 
@@ -178,7 +178,7 @@ def gen_page_content(state, df):
 
     # display features over time, aggregated forall clusters
     with mid_col:
-        st.header('Timeline of cluster activity and metadata usage over all clusters.')
+        st.header('Meta-cluster timeline of activity and metadata usage.')
         feature_cols = [f for f in cluster_features if f not in ('days')]
         features = cluster_features.groupby('days', as_index=False).agg('sum')
         melt = pd.melt(features, id_vars=['days'], value_vars=feature_cols)
@@ -198,7 +198,6 @@ def gen_page_content(state, df):
         is_infoshield = True
         label = subdf['LSH label'].value_counts().idxmax()
         start_path = '../InfoShield/results/{}'.format(label)
-        start_path = './data/example.pkl'
         if not os.path.exists(start_path):
             st.warning('We cannot find InfoShield results for this data, so only the ad text is displayed.')
             is_infoshield = False

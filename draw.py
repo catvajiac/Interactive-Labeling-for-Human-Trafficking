@@ -159,7 +159,7 @@ def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='
 
     return alt.Chart(df).mark_tick(thickness=20).encode(
         x=alt.X('days:T',
-            axis=alt.Axis(grid=False, tickMinStep=7),
+            axis=alt.Axis(grid=False, tickMinStep=7, format='%e %b, %Y'),
             scale=alt.Scale(domain=[min_date, max(df.days)]
         )),
         y=alt.Y(facet,
@@ -178,7 +178,7 @@ def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
     ).configure_legend(
-        gradientLength=275,
+        gradientLength=410,
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
     ).configure_axisX(
@@ -241,8 +241,6 @@ def timeline(data, date_col='day_posted:T'):
         :return:        altair timeline '''
 
     date_s = date_col.split(':')[0]
-
-    #TODO: figure out how to calculate # of unique locations per day
 
     return alt.Chart(data).transform_aggregate(
         num_ads='count()',
@@ -349,7 +347,7 @@ def stream_chart(df):
 
     # The basic line
     ad_line = alt.Chart(df).mark_line(interpolate='natural').encode(
-        x=alt.X('days:T', axis=alt.Axis(grid=False, tickMinStep=7)),
+        x=alt.X('days:T', axis=alt.Axis(grid=False, tickMinStep=7, format='%e %b, %Y')),
         y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
         color='variable:N'
     ).transform_filter(

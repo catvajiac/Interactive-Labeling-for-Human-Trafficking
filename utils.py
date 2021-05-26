@@ -418,7 +418,7 @@ def get_template_text(template, ads, i):
         3:  ('ins', '#afa'),
     }
 
-    to_write = ['Template #{}: '.format(i), ' '.join(template), '<br>']
+    to_write = ['Micro-cluster #{}: '.format(i), ' '.join(template), '<br>']
 
     for ad_index, ad in enumerate(ads):
         to_write.append('Ad #{}'.format(ad_index+1))
