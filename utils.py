@@ -8,7 +8,7 @@ import pickle as pkl
 import streamlit as st
 import types
 
-from annotated_text import annotation
+from annotated_text import annotated_text, annotation
 from collections import defaultdict
 
 
@@ -18,18 +18,34 @@ from collections import defaultdict
 BIG_FONT_SIZE = 24
 SMALL_FONT_SIZE = 18
 
-LOCATION_COLOR = '#2ca02cff'
-AD_COLOR = '1f77b4ff'
+# all colors from category10 colorscheme
+LOCATION_COLOR = '#2ca02cff'    # green
+AD_COLOR = '#1f77b4ff'          # blue
+CLUSTER_COLOR = '#ff7f0eff'     # orange
+IMAGE_COLOR = '#17becfff'       # cyan
+EMAIL_COLOR = '#d62728ff'       # red
+PHONE_COLOR = '#bcbd22ff'       # yellow
+SOCIAL_COLOR = '#9467bdff'      # purple
+
+STAT_TO_COLOR = {
+    'phones': PHONE_COLOR,
+    'emails': EMAIL_COLOR,
+    'ads': AD_COLOR,
+    'micro-clusters': CLUSTER_COLOR,
+    'images': IMAGE_COLOR,
+    'locations': LOCATION_COLOR,
+    'social accts': SOCIAL_COLOR
+}
 
 
 
 BY_CLUSTER_PARAMS = ({
-    'groupby': '# clusters',
-    'sortby':  '# ads' 
+    'groupby': 'micro-clusters',
+    'sortby':  'ads' 
 }, {
-    'y': '# ads',
-    'facet': '# clusters:N',
-    'tooltip': ['days', '# ads'],
+    'y': 'ads',
+    'facet': 'micro-clusters:N',
+    'tooltip': ['days', 'ads'],
     'show_labels': False
 })
 
@@ -43,6 +59,110 @@ BY_METADATA_PARAMS = ({
 })
 
 BUTTON_STYLE = '<style>div.row-widget.stRadio > div{flex-direction:row;}</style>'
+
+
+def write_border(stats, state):
+    stats_str = ''
+    template = '<div class=stat, style="color: {color};">{text}</div>'
+    for name, (count, unique) in stats.items():
+        name = name.split()[1]
+        if name == 'clusters':
+            name = 'micro-clusters'
+
+        if name == 'image':
+            name = 'images'
+
+        if name == 'socials':
+            name = 'social accts'
+
+        text = '''<div class="stat">
+            <p class='stat_name'>{}</p>
+            <p class='stat_number'>{}</p>
+            '''.format(name.upper(), count)
+
+
+        if unique == '--' or not count and not unique:
+            text += "</div>"
+            stats_str += template.format(color=STAT_TO_COLOR[name], text=text)
+            continue
+
+        #text += '<p style="color:#bbbbbb";margin:-10px>{} unique</p></div>'.format(unique)
+        text += '<p class="stat_unique">{} unique</p></div>'.format(unique)
+
+        stats_str += template.format(color=STAT_TO_COLOR[name], text=text)
+
+    # inject custom banner at top of visualization
+    # note: have to double braces when using .format()
+    st.write('''
+    <style>
+        p {{
+            font-size: 20px;
+            margin: 0;
+        }}
+
+        .header {{
+            padding: 10px 16px;
+            background: #353535;
+            color: #f1f1f1;
+            position: fixed;
+            top: 0;
+            width: 94%;
+            font-size: 30px;
+        }}
+
+        .label_button {{
+            margin-bottom: 35px;
+            margin-top: 25px;
+            font-weight: bold;
+        }}
+
+        #ht {{
+            font-size: 16px;
+            margin: 0px;
+        }}
+
+        #title {{
+            position: float;
+            float: left;
+        }}
+
+        .stat {{
+            margin-left: 6%;
+            position: float;
+            float: left;
+            text-align: center;
+        }}
+
+        .stat_name {{
+            font-size: 18px;
+            margin: -5px;
+        }}
+
+        .stat_number {{
+            font-weight: bold;
+            font-size: 28px;
+            margin: -10px;
+        }}
+
+        .stat_unique {{
+            color: #bbbbbb;
+            margin-top: -10px;
+            margin-bottom: -10px;
+        }}
+
+        h1 {{
+            color: #f1f1f1;
+            padding: 0;
+        }}
+    </style>
+    <div class="header">
+        <div id="title">
+            <p id='ht'>Human Trafficking</p>
+            <h1>Suspicious Meta-Cluster #{meta_index}</h1>
+        </div>
+        {text}
+    </div>
+    '''.format(meta_index=state.index+1, text=stats_str), unsafe_allow_html=True)
 
 
 ### Generic utils
@@ -83,20 +203,20 @@ def get_subdf(df, state, date_col='day_posted'):
     subdf[date_col] = subdf[date_col].dt.normalize()
 
     return subdf
-
+ 
 
 #@st.cache(show_spinner=False)
 def pre_process_df(df, filename, date_col='day_posted', use_cache=True):
     clean_filename = './data/{}-cleaned.csv'.format(os.path.splitext(os.path.basename(filename))[0])
     if use_cache and os.path.exists(clean_filename):
         copy_df = pd.read_csv(clean_filename)
-        copy_df['days'] = pd.to_datetime(copy_df.days, infer_datetime_format=True)
+        copy_df['days'] = pd.to_datetime(copy_df.days, infer_datetime_format=True).dt.normalize()
         return copy_df
 
     copy_df = df.copy()
     copy_df['location'] = [prettify_location(*tup) for tup in df[['city_id', 'country_id']].values]
 
-    days = pd.to_datetime(copy_df[date_col], infer_datetime_format=True)
+    days = pd.to_datetime(copy_df[date_col], infer_datetime_format=True).dt.normalize()
     copy_df['days'] = days.dt.tz_localize('UTC', ambiguous=True)
 
     copy_df = gen_locations(copy_df)
@@ -117,24 +237,6 @@ def extract_field(series):
         return series
 
     return np.concatenate(series.apply(lambda val: str(val).split(';')).values)
-
-
-@st.cache
-def pretty_basic_stats(stats):
-    ''' prettify output of basic_stats '''
-    text = []
-    for name, (count, unique) in stats.items():
-        name = name.split()[1]
-        if name == 'clusters':
-            name = 'micro-clusters'
-
-        if unique == '--':
-            text.append('**{}** {}'.format(count, name))
-            continue
-
-        text.append('**{}** total {} (**{}** unique)'.format(count, name, unique))
-
-    return ', '.join(text[:-1]) + ', and ' + text[-1] + '.'
 
 
 @st.cache
@@ -163,6 +265,7 @@ def basic_stats(df, cols, cluster_label='LSH label'):
     metadata = {pretty_s(col): [len(extract_field(df[col])), len(set(extract_field(df[col])))] for col in cols}
     metadata['# ads'] = [len(df), '--']
     metadata['# clusters'] = [len(df[cluster_label].unique()), '--']
+    metadata['# locations'] = [len(df.city_id.unique()), '--']
 
     return metadata
 
@@ -171,7 +274,9 @@ def basic_stats(df, cols, cluster_label='LSH label'):
 def top_n(df, groupby, sortby, n=10):
     ''' get the top n groups from a DataFrame
         :param df:      Pandas DataFrame for one meta-cluster
-        :param groupby: column from DataFrame to create groups before aggregation
+        :param groupby: column from DataFrame to create groups bef
+
+ aggregation
         :param sortby:  column from DataFrame to aggregate & sort by
         :param n:       number of groups to return
         :return         DataFrame containing data from top n groups'''
@@ -288,14 +393,15 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
     def total(series):
         return len(extract_field(series))
 
-    agg_dict = {name: total for name in ('ad_id', 'city_id', 'email', 'image_id')}
+    agg_dict = {name: total for name in ('ad_id', 'city_id', 'email', 'image_id', 'phone', 'social')}
     rename_dict = {
-        'ad_id': '# ads',
-        'city_id': '# locations',
-        'email': '# emails',
-        'image_id': '# images',
-        'LSH label': '# clusters',
-        'social': '# social media tags',
+        'ad_id': 'ads',
+        'city_id': 'locations',
+        'email': 'emails',
+        'image_id': 'images',
+        'LSH label': 'micro-clusters',
+        'social': 'social media accts',
+        'phone': 'phones'
     }
 
     by_cluster_df = df.groupby(

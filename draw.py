@@ -302,13 +302,16 @@ def stream_chart(df):
        empty='none'
     )
 
+    domain = list(utils.STAT_TO_COLOR.keys())
+    range_ = list(utils.STAT_TO_COLOR.values())
+
     # The basic line
     line = alt.Chart(df).mark_line(interpolate='natural').encode(
         x=alt.X('days:T', axis=alt.Axis(grid=False, labels=False, title='')),
-        y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
-        color=alt.Color('variable:N', legend=alt.Legend(orient='top'))
+        y=alt.Y('value:Q', axis=alt.Axis(grid=False), title='# per day'),
+        color=alt.Color('variable:N', legend=alt.Legend(orient='top'), scale=alt.Scale(domain=domain, range=range_)),
     ).transform_filter(
-        alt.datum.variable != '# clusters'
+        alt.datum.variable != 'micro-clusters'
     )
 
     # Transparent selectors across the chart. This is what tells us
@@ -341,17 +344,17 @@ def stream_chart(df):
     c1 = alt.layer(
         line, selectors, points, rules, text
     ).properties(
-        width=550,
-        height=200
+        width=575,
+        height=275
     )
 
     # The basic line
     ad_line = alt.Chart(df).mark_line(interpolate='natural').encode(
         x=alt.X('days:T', axis=alt.Axis(grid=False, tickMinStep=7, format='%e %b, %Y')),
-        y=alt.Y('value:Q', axis=alt.Axis(grid=False)),
-        color='variable:N'
+        y=alt.Y('value:Q', axis=alt.Axis(grid=False), title='# per day'),
+        color=alt.Color('variable:N', legend=alt.Legend(title=None))
     ).transform_filter(
-        alt.datum.variable == '# clusters'
+        alt.datum.variable == 'micro-clusters'
     )
 
     # Draw points on the line, and highlight based on selection
@@ -368,12 +371,13 @@ def stream_chart(df):
     c2 = alt.layer(
         ad_line, selectors, ad_points, rules, ad_text
     ).properties(
-        width=550,
-        height=100
+        width=575,
+        height=75
     )
 
     return alt.vconcat(c1, c2,
-        padding={'top': 5, 'bottom': 5, 'right': 50, 'left': 5}
+        padding={'top': 5, 'bottom': 5, 'right': 50, 'left': 5},
+        spacing=0
     ).configure_axis(
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE
@@ -381,6 +385,7 @@ def stream_chart(df):
         gradientLength=275,
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
+        columns=4,
     ).configure_axisX(
         labelAlign='left'
     )

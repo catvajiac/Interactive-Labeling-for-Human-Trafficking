@@ -127,27 +127,23 @@ def gen_page_content(state, df):
         :param state:           SessionState object storing cluster data
         :param df:              pandas DataFrame containing ad data '''
 
-    st.markdown('''<style>
-    p { font-size: 20px; }
-    </style>''', unsafe_allow_html=True)
-    first_col, last_col = st.beta_columns([4, 1])
+
+    # feature generation
+    subdf = utils.get_subdf(df, state)
+    cluster_features, _ = utils.cluster_feature_extract(subdf)
+    stats = utils.basic_stats(subdf[columns + ['LSH label', 'city_id']], columns)
+
+    utils.write_border(stats, state)
+
+    _, last_col = st.beta_columns([4, 1])
     with last_col:
-        st.write('  ')
+        #st.write('<br><br>', unsafe_allow_html=True)
         if st.button('View next meta-cluster'):
             try:
                 state.cluster = next(state.gen_clusters)
                 #utils.write_labels(state)
             except StopIteration:
                 state.is_stop = True
-
-    # feature generation
-    subdf = utils.get_subdf(df, state)
-    cluster_features, metadata_features = utils.cluster_feature_extract(subdf)
-    stats = utils.basic_stats(subdf[columns + ['LSH label']], columns)
-
-    with first_col:
-        st.title('Suspicious Meta-Cluster #{}'.format(state.index+1))
-        st.subheader('This cluster has: ' + utils.pretty_basic_stats(stats))
 
     # on first iteration, before button press
     if state.is_first:
@@ -166,14 +162,9 @@ def gen_page_content(state, df):
     # strip plot with heatmap
     with left_col:
         st.header('Activity over time per micro-cluster.')
-        #data_view = st.selectbox('Which view would you like to see?',\
-        #     ['Meta-Cluster activity: # ads per top micro-clusters per day', 'Metadata usage: # clusters using top metadata per day'])
 
-        top_n_params, chart_params = utils.BY_CLUSTER_PARAMS# if data_view.startswith('Meta-Cluster') \
-        #    else utils.BY_METADATA_PARAMS
-        plot_df = cluster_features #if data_view.startswith('Meta-Cluster') else metadata_features
-
-        top_df = utils.top_n(plot_df, **top_n_params)
+        top_n_params, chart_params = utils.BY_CLUSTER_PARAMS
+        top_df = utils.top_n(cluster_features, **top_n_params)
         st.altair_chart(draw.strip_plot(top_df, **chart_params), use_container_width=True)
 
     # display features over time, aggregated forall clusters
@@ -192,9 +183,13 @@ def gen_page_content(state, df):
 
     left_col, _, right_col = st.beta_columns((4, 0.1, 1))
 
+    left_col.header('Ad text, organized by micro-cluster')
+    right_col.header('On a scale of 1 (very unlikely) to 5 (very likely), is this meta-cluster...')
+
+    left_col, _, mid_col, _, right_col = st.beta_columns((4, 0.1, 0.5, 0.1, 0.5))
+
     # template / ad text visualization
     with left_col:
-        st.header('Ad text, organized by micro-cluster')
         is_infoshield = True
         label = subdf['LSH label'].value_counts().idxmax()
         start_path = '../InfoShield/results/{}'.format(label)
@@ -204,10 +199,11 @@ def gen_page_content(state, df):
         draw.templates(start_path, df, is_infoshield)
 
     # labeling table
-    with right_col:
-        st.header('Labeling: On a scale of 1 (very unlikely) to 5 (very likely), how likely is this to be...')
-        for cluster_type in ('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign'):
-            st.write(draw.labeling_buttons(cluster_type))
+    labels = []
+    for index, cluster_type in enumerate(('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign')):
+        #mid_col.write('<p style="margin-bottom: 35px;margin-top:25px;font-weight:bold">{}</p>'.format(cluster_type), unsafe_allow_html=True)
+        mid_col.write('<p class="label_button">{}</p>'.format(cluster_type), unsafe_allow_html=True)
+        labels.append(right_col.slider('', 1, 5, 1, key=index))
 
 
 # Generate content for app
@@ -222,6 +218,8 @@ state_params = {
 state = SessionState.get(**state_params)
 
 default_file_path = './data/synthetic_data.csv'
+#default_file_path = './data/sampleRandom800kAds2021.csv'
+#default_file_path = '../InfoShield/data/all_massage_peterjason_LSH_labels.csv'
 #file_path = st.text_input("Please specify the path of input file")
 file_path = ''
 
@@ -246,14 +244,15 @@ with st.spinner('Processing data...'):
             utils.filename_stub(filename), df, columns)
         state.gen_clusters = utils.gen_ccs(graph)
 
-st.sidebar.title('Navigation')
+#st.sidebar.title('Navigation')
 
 page_opts = ('Landing page', 'Labeling page')
-choose_page = st.sidebar.radio('Go to', page_opts)
+#choose_page = st.sidebar.radio('Go to', page_opts)
 
 clean_df = utils.pre_process_df(df, filename)
 
-if choose_page == page_opts[0]:
-    gen_landing_page_content(state, clean_df)
-else:
-    gen_page_content(state, clean_df)
+#if choose_page == page_opts[0]:
+#    gen_landing_page_content(state, clean_df)
+#else:
+#    gen_page_content(state, clean_df)
+gen_page_content(state, clean_df)
