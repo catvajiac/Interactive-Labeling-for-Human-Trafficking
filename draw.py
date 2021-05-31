@@ -1,5 +1,6 @@
 import altair as alt
 import datetime
+from altair.vegalite.v4.schema.channels import StrokeWidth
 import numpy as np
 import nx_altair as nxa
 import pandas as pd
@@ -330,7 +331,8 @@ def stream_chart(df):
 
     # Draw text labels near the points, and highlight based on selection
     text = line.mark_text(align='left', dx=5, dy=-5).encode(
-        text=alt.condition(nearest, 'value:Q', alt.value(' '))
+        text=alt.condition(nearest, 'value:Q', alt.value(' ')),
+        size=alt.value(20),
     )
 
     # Draw a rule at the location of the selection
@@ -342,7 +344,7 @@ def stream_chart(df):
 
     # Put the five layers into a chart and bind the data
     c1 = alt.layer(
-        line, selectors, points, rules, text
+        line, rules, selectors, points, text
     ).properties(
         width=575,
         height=275
@@ -364,12 +366,13 @@ def stream_chart(df):
 
     # Draw text labels near the points, and highlight based on selection
     ad_text = ad_line.mark_text(align='left', dx=5, dy=-5).encode(
-        text=alt.condition(nearest, 'value:Q', alt.value(' '))
+        text=alt.condition(nearest, 'value:Q', alt.value(' ')),
+        size=alt.value(20)
     )
 
     # Put the five layers into a chart and bind the data
     c2 = alt.layer(
-        ad_line, selectors, ad_points, rules, ad_text
+        ad_line, rules, selectors, ad_points, ad_text
     ).properties(
         width=575,
         height=75

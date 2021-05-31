@@ -135,10 +135,10 @@ def gen_page_content(state, df):
 
     utils.write_border(stats, state)
 
-    _, last_col = st.beta_columns([4, 1])
+    _, last_col = st.beta_columns([10, 1])
     with last_col:
-        #st.write('<br><br>', unsafe_allow_html=True)
-        if st.button('View next meta-cluster'):
+        st.write('<br>', unsafe_allow_html=True)
+        if st.button('Next meta-cluster'):
             try:
                 state.cluster = next(state.gen_clusters)
                 #utils.write_labels(state)
@@ -201,7 +201,6 @@ def gen_page_content(state, df):
     # labeling table
     labels = []
     for index, cluster_type in enumerate(('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign')):
-        #mid_col.write('<p style="margin-bottom: 35px;margin-top:25px;font-weight:bold">{}</p>'.format(cluster_type), unsafe_allow_html=True)
         mid_col.write('<p class="label_button">{}</p>'.format(cluster_type), unsafe_allow_html=True)
         labels.append(right_col.slider('', 1, 5, 1, key=index))
 

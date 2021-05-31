@@ -86,7 +86,6 @@ def write_border(stats, state):
             stats_str += template.format(color=STAT_TO_COLOR[name], text=text)
             continue
 
-        #text += '<p style="color:#bbbbbb";margin:-10px>{} unique</p></div>'.format(unique)
         text += '<p class="stat_unique">{} unique</p></div>'.format(unique)
 
         stats_str += template.format(color=STAT_TO_COLOR[name], text=text)
@@ -104,9 +103,9 @@ def write_border(stats, state):
             padding: 10px 16px;
             background: #353535;
             color: #f1f1f1;
-            position: fixed;
-            top: 0;
-            width: 94%;
+            position: absolute;
+            top: -80px;
+            width: 101%;
             font-size: 30px;
         }}
 
