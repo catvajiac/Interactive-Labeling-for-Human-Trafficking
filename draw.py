@@ -76,7 +76,7 @@ def templates(directory, df, is_infoshield):
 
     annotated_text(*to_write,
         scrolling=True,
-        height=400
+        height=530,
     )
 
 
@@ -84,16 +84,32 @@ def map(df):
     ''' generate map with ad location data
         :param df:  Pandas DataFrame with latitude, longitude, and count data
         :return:    altair map with ad counts displayed '''
-    df = df[(df.lat != 1) | (df.lon != 1)]
-    center, scale = utils.get_center_scale(df.lat, df.lon)
 
+    df = df[(df.lat != 1) | (df.lon != 1)]
+
+    center, scale = utils.get_center_scale(df.lat, df.lon)
     countries = alt.topo_feature(data.world_110m.url, 'countries')
+
+    base = alt.Chart(df).mark_rect(
+        color='lightgray',
+        opacity=0.3
+    ).encode(
+        x='days:T',
+    ).properties(
+        height=75,
+        width=650
+    )
+
+    brush = alt.selection_interval(encodings=['x'],empty='all')
+    background = base.add_selection(brush)
+    selected = base.transform_filter(brush).mark_rect(color=utils.LOCATION_COLOR)
+
     base = alt.Chart(countries, width='container').mark_geoshape(
         fill='white',
         stroke='#DDDDDD'
     ).properties(
-        width=700,
-        height=400
+        height=455,
+        width=650
     )
 
     agg_df = utils.aggregate_locations(df)
@@ -102,12 +118,13 @@ def map(df):
         color=utils.LOCATION_COLOR,
         fillOpacity=.5,
     ).encode(
-        size=alt.Size('count:Q', scale=alt.Scale(range=[100, 500])),
+        size=alt.Size('count:Q', scale=alt.Scale(range=[50, 400]), legend=None),
         longitude='lon:Q',
         latitude='lat:Q',
         tooltip=['location', 'count']
-    )
+    )#.transform_filter(brush)
 
+    #return (background + selected) &
     return (base + scatter).project(
         'equirectangular',
         scale=scale,
@@ -156,34 +173,32 @@ def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='
         :param tooltip: list of DataFrame columns to include in tooltip
         :return:        altair strip plot '''
 
-    min_date = min(df.days) - datetime.timedelta(days=1)
-
-    return alt.Chart(df).mark_tick(thickness=20).encode(
+    thickness = 600 / (max(df.days.dt.day) - min(df.days.dt.day) + 1)
+    return alt.Chart(df).mark_tick(thickness=thickness).encode(
         x=alt.X('days:T',
-            axis=alt.Axis(grid=False, tickMinStep=7, format='%e %b, %Y'),
-            scale=alt.Scale(domain=[min_date, max(df.days)]
-        )),
+            axis=alt.Axis(grid=False, tickCount=4, format=utils.DATE_FORMAT),
+            title=''),
         y=alt.Y(facet,
-            axis=alt.Axis(grid=False, labels=show_labels),
-            title='Micro-cluster',
-            sort=sort
+            axis=None,
+            sort=sort,
         ),
-        color=alt.Color(y, scale=alt.Scale(scheme=colorscheme, type='sqrt')),
+        color=alt.Color(y, scale=alt.Scale(scheme=alt.SchemeParams(name=colorscheme, extent=[0, 1]),
+            type='log')),
         tooltip=tooltip,
     ).properties(
         width=650,
-        height=510
+        height=480
     ).configure_view(
         stroke=None
     ).configure_axis(
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
     ).configure_legend(
-        gradientLength=410,
+        gradientLength=600,
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
-    ).configure_axisX(
-        labelAlign='left'
+        orient='top',
+        title=None
     )
 
 
@@ -309,8 +324,8 @@ def stream_chart(df):
     # The basic line
     line = alt.Chart(df).mark_line(interpolate='natural').encode(
         x=alt.X('days:T', axis=alt.Axis(grid=False, labels=False, title='')),
-        y=alt.Y('value:Q', axis=alt.Axis(grid=False), title='# per day'),
-        color=alt.Color('variable:N', legend=alt.Legend(orient='top'), scale=alt.Scale(domain=domain, range=range_)),
+        y=alt.Y('value:Q', axis=alt.Axis(grid=False, tickCount=5), title=''),
+        color=alt.Color('variable:N', legend=None, scale=alt.Scale(domain=domain, range=range_)),
     ).transform_filter(
         alt.datum.variable != 'micro-clusters'
     )
@@ -330,9 +345,15 @@ def stream_chart(df):
     )
 
     # Draw text labels near the points, and highlight based on selection
-    text = line.mark_text(align='left', dx=5, dy=-5).encode(
-        text=alt.condition(nearest, 'value:Q', alt.value(' ')),
+    text = line.mark_text(
+        align='left',
+        dx=5, dy=-5,
+        blend=alt.Blend('multiply')
+    ).encode(
+        text=alt.condition(nearest, 'label:N', alt.value(' ')),
         size=alt.value(20),
+    ).transform_calculate(
+        label='datum.value + " " + datum.variable'
     )
 
     # Draw a rule at the location of the selection
@@ -346,14 +367,16 @@ def stream_chart(df):
     c1 = alt.layer(
         line, rules, selectors, points, text
     ).properties(
-        width=575,
-        height=275
+        width=625,
+        height=320
     )
 
     # The basic line
     ad_line = alt.Chart(df).mark_line(interpolate='natural').encode(
-        x=alt.X('days:T', axis=alt.Axis(grid=False, tickMinStep=7, format='%e %b, %Y')),
-        y=alt.Y('value:Q', axis=alt.Axis(grid=False), title='# per day'),
+        x=alt.X('days:T',
+            axis=alt.Axis(grid=False, tickCount=4, format=utils.DATE_FORMAT),
+            title=''),
+        y=alt.Y('value:Q', axis=alt.Axis(grid=False, tickCount=1), title=''),
         color=alt.Color('variable:N', legend=alt.Legend(title=None))
     ).transform_filter(
         alt.datum.variable == 'micro-clusters'
@@ -365,31 +388,30 @@ def stream_chart(df):
     )
 
     # Draw text labels near the points, and highlight based on selection
-    ad_text = ad_line.mark_text(align='left', dx=5, dy=-5).encode(
-        text=alt.condition(nearest, 'value:Q', alt.value(' ')),
+    ad_text = ad_line.mark_text(
+        align='left',
+        dx=5, dy=-5,
+        blend=alt.Blend('multiply'),
+    ).encode(
+        text=alt.condition(nearest, 'label:N', alt.value(' ')),
         size=alt.value(20)
+    ).transform_calculate(
+        label='datum.value + " " + datum.variable'
     )
 
     # Put the five layers into a chart and bind the data
     c2 = alt.layer(
         ad_line, rules, selectors, ad_points, ad_text
     ).properties(
-        width=575,
+        width=625,
         height=75
     )
 
     return alt.vconcat(c1, c2,
-        padding={'top': 5, 'bottom': 5, 'right': 50, 'left': 5},
+        padding={'top': 5, 'bottom': 5, 'right': 150, 'left': 5},
         spacing=0
     ).configure_axis(
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE
-    ).configure_legend(
-        gradientLength=275,
-        labelFontSize=utils.SMALL_FONT_SIZE,
-        titleFontSize=utils.BIG_FONT_SIZE,
-        columns=4,
-    ).configure_axisX(
-        labelAlign='left'
     )
     

@@ -15,6 +15,8 @@ from collections import defaultdict
 
 ### Params
 
+DATE_FORMAT = "%e %b %y"
+
 BIG_FONT_SIZE = 24
 SMALL_FONT_SIZE = 18
 
@@ -35,6 +37,16 @@ STAT_TO_COLOR = {
     'images': IMAGE_COLOR,
     'locations': LOCATION_COLOR,
     'social accts': SOCIAL_COLOR
+}
+
+STAT_TO_HEADER_COLOR = {
+    'phones': '#d6d81b',
+    'emails': '#ff090a',
+    'ads': '#1d9bff',
+    'micro-clusters': CLUSTER_COLOR,
+    'locations': '#2abc29',
+    'images': '#2cd6eb',
+    'social accts': '#ac57ff'
 }
 
 
@@ -65,9 +77,9 @@ def write_border(stats, state):
     stats_str = ''
     template = '<div class=stat, style="color: {color};">{text}</div>'
     for name, (count, unique) in stats.items():
-        name = name.split()[1]
-        if name == 'clusters':
-            name = 'micro-clusters'
+        #name = name.split()[1]
+        #if name == 'clusters':
+        #    name = 'micro-clusters'
 
         if name == 'image':
             name = 'images'
@@ -83,12 +95,12 @@ def write_border(stats, state):
 
         if unique == '--' or not count and not unique:
             text += "</div>"
-            stats_str += template.format(color=STAT_TO_COLOR[name], text=text)
+            stats_str += template.format(color=STAT_TO_HEADER_COLOR[name], text=text)
             continue
 
         text += '<p class="stat_unique">{} unique</p></div>'.format(unique)
 
-        stats_str += template.format(color=STAT_TO_COLOR[name], text=text)
+        stats_str += template.format(color=STAT_TO_HEADER_COLOR[name], text=text)
 
     # inject custom banner at top of visualization
     # note: have to double braces when using .format()
@@ -110,14 +122,16 @@ def write_border(stats, state):
         }}
 
         .label_button {{
-            margin-bottom: 35px;
-            margin-top: 25px;
+            margin-bottom: 0px;
+            margin-top: 0px;
             font-weight: bold;
         }}
 
         #ht {{
-            font-size: 16px;
-            margin: 0px;
+            font-size: 20px;
+            margin: 0px 0px -15px 0px;
+            padding: 0px;
+            color: #bbbbbb;
         }}
 
         #title {{
@@ -133,8 +147,8 @@ def write_border(stats, state):
         }}
 
         .stat_name {{
-            font-size: 18px;
-            margin: -5px;
+            font-size: 20px;
+            margin: 2px 0px 0px 0px;
         }}
 
         .stat_number {{
@@ -146,12 +160,24 @@ def write_border(stats, state):
         .stat_unique {{
             color: #bbbbbb;
             margin-top: -10px;
-            margin-bottom: -10px;
+            margin-bottom: -5px;
         }}
 
         h1 {{
             color: #f1f1f1;
             padding: 0;
+            margin-top: -10px;
+        }}
+
+        .stButton {{
+            margin-top: -60px;
+            margin-left: 40px;
+        }}
+
+        div.stButton > button:first-child {{
+            color: #f1f1f1;
+            background-color: #353535;
+            border: 3px solid #f1f1f1;
         }}
     </style>
     <div class="header">
@@ -243,7 +269,11 @@ def pretty_s(s):
     ''' prettify a string for display
         :param s:  string to prettify
         :return     string with spaces and plural '''
-    return '# {}s'.format(s.replace('_', ' '))
+    if s.endswith('id'):
+        s = s[:-3]
+    if s == 'social':
+        s = 'social acct'
+    return '{}s'.format(s.replace('_', ' '))
 
 
 @st.cache
@@ -262,9 +292,9 @@ def basic_stats(df, cols, cluster_label='LSH label'):
         :return:        DataFrame with metadata counts '''
 
     metadata = {pretty_s(col): [len(extract_field(df[col])), len(set(extract_field(df[col])))] for col in cols}
-    metadata['# ads'] = [len(df), '--']
-    metadata['# clusters'] = [len(df[cluster_label].unique()), '--']
-    metadata['# locations'] = [len(df.city_id.unique()), '--']
+    metadata['ads'] = [len(df), '--']
+    metadata['micro-clusters'] = [len(df[cluster_label].unique()), '--']
+    metadata['locations'] = [len(df.city_id.unique()), '--']
 
     return metadata
 
@@ -307,7 +337,7 @@ def get_center_scale(lat, lon):
     scale_lat = scale(lat, 90)
     scale_lon = scale(lon, 180)
 
-    return center, min(scale_lat, scale_lon) * 100
+    return center, min(min(scale_lat, scale_lon) * 75, 1000)
 
 
 @st.cache
@@ -331,6 +361,9 @@ def prettify_location(city, country):
     cities_df = read_csv('~/grad_projects/data/aht_data/metadata/cities.csv')
     countries_df = read_csv('~/grad_projects/data/aht_data/metadata/countries.csv')
 
+    # should only happen if nan
+    if country not in countries_df.id or city not in cities_df.id:
+        return ''
     country_str = countries_df[countries_df.id == country].code.values[0]
     city_str = cities_df[cities_df.id == city].name.values[0]
     return ', '.join([city_str, country_str])
@@ -392,14 +425,16 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
     def total(series):
         return len(extract_field(series))
 
-    agg_dict = {name: total for name in ('ad_id', 'city_id', 'email', 'image_id', 'phone', 'social')}
+    agg_dict = {name: total for name in ('ad_id', 'email', 'image_id', 'phone', 'social')}
+    agg_dict['city_id'] = lambda series: len(series.unique())
+
     rename_dict = {
         'ad_id': 'ads',
         'city_id': 'locations',
         'email': 'emails',
         'image_id': 'images',
-        'LSH label': 'micro-clusters',
-        'social': 'social media accts',
+        cluster_label: 'micro-clusters',
+        'social': 'social accts',
         'phone': 'phones'
     }
 
@@ -508,12 +543,12 @@ def get_all_template_text(directory):
             to_write.append('<br><br>')
 
         pickled = pkl.load(open(result_loc, 'rb'))
-        to_write += get_template_text(*pickled, i)
+        to_write += get_template_text(*pickled)
 
     return to_write
 
 #@st.cache(hash_funcs={types.GeneratorType: id}, show_spinner=False)
-def get_template_text(template, ads, i):
+def get_template_text(i, template, ads):
     ''' annotate a particular template with relevant ads as calculated from InfoShield
         :param template:    list of tokens in template
         :param ads:         list of tuples of form (type_index, token)
@@ -527,7 +562,8 @@ def get_template_text(template, ads, i):
         3:  ('ins', '#afa'),
     }
 
-    to_write = ['Micro-cluster #{}: '.format(i), ' '.join(template), '<br>']
+
+    to_write = ['<p><b>Micro-cluster #{}:</b> {}</p>'.format(i, template), '<br>']
 
     for ad_index, ad in enumerate(ads):
         to_write.append('Ad #{}'.format(ad_index+1))
@@ -556,6 +592,9 @@ def get_template_text(template, ads, i):
             continue
 
         token, curr_type, color = tup
+        if curr_type == 'const':
+            annotated.append(annotation(token, curr_type, background_color=color, font_size='{}px'.format(SMALL_FONT_SIZE)))
+            continue
         annotated.append(annotation(token, curr_type, background_color=color, font_size='{}px'.format(BIG_FONT_SIZE)))
 
     return annotated

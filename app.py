@@ -128,23 +128,6 @@ def gen_page_content(state, df):
         :param df:              pandas DataFrame containing ad data '''
 
 
-    # feature generation
-    subdf = utils.get_subdf(df, state)
-    cluster_features, _ = utils.cluster_feature_extract(subdf)
-    stats = utils.basic_stats(subdf[columns + ['LSH label', 'city_id']], columns)
-
-    utils.write_border(stats, state)
-
-    _, last_col = st.beta_columns([10, 1])
-    with last_col:
-        st.write('<br>', unsafe_allow_html=True)
-        if st.button('Next meta-cluster'):
-            try:
-                state.cluster = next(state.gen_clusters)
-                #utils.write_labels(state)
-            except StopIteration:
-                state.is_stop = True
-
     # on first iteration, before button press
     if state.is_first:
         state.cluster = next(state.gen_clusters)
@@ -157,11 +140,30 @@ def gen_page_content(state, df):
         st.balloons()
         return
 
+    # feature generation
+    subdf = utils.get_subdf(df, state)
+    cluster_features, _ = utils.cluster_feature_extract(subdf)
+    stats = utils.basic_stats(subdf[columns + ['LSH label', 'city_id']], columns)
+
+    utils.write_border(stats, state)
+
+    _, last_col = st.beta_columns([10, 1])
+    with last_col:
+        #st.write('<br>', unsafe_allow_html=True)
+        if st.button('Next meta-cluster'):
+            try:
+                state.cluster = next(state.gen_clusters)
+                #utils.write_labels(state)
+            except StopIteration:
+                state.is_stop = True
+
+
     left_col, _, mid_col, _, right_col = st.beta_columns((1, 0.1, 1, 0.1, 1))
+
 
     # strip plot with heatmap
     with left_col:
-        st.header('Activity over time per micro-cluster.')
+        st.header('**# Ads over time**: one row is one micro-cluster')
 
         top_n_params, chart_params = utils.BY_CLUSTER_PARAMS
         top_df = utils.top_n(cluster_features, **top_n_params)
@@ -169,24 +171,27 @@ def gen_page_content(state, df):
 
     # display features over time, aggregated forall clusters
     with mid_col:
-        st.header('Meta-cluster timeline of activity and metadata usage.')
-        feature_cols = [f for f in cluster_features if f not in ('days')]
-        features = cluster_features.groupby('days', as_index=False).agg('sum')
+        st.header('**Metadata over time** of meta-cluster')
+        feature_cols = [f for f in cluster_features if f != 'days' and stats[f][0] != 0]
+        agg_dict = {f: 'sum' for f in feature_cols if f not in ('micro-clusters', 'locations')}
+        agg_dict['micro-clusters'] = 'count'
+        agg_dict['locations'] = lambda series: series.nunique()
+        features = cluster_features.groupby('days', as_index=False).agg(agg_dict)
         melt = pd.melt(features, id_vars=['days'], value_vars=feature_cols)
         st.altair_chart(draw.stream_chart(melt), use_container_width=True)
 
     # show map of ad locations
     with right_col:
-        st.header('Geographical spread of advertisements.')
-        st.write(draw.map(subdf[['ad_id', 'lat', 'lon', 'location']]))
+        st.header('Geographical spread of ads.')
+        st.write(draw.map(subdf[['ad_id', 'lat', 'lon', 'location', 'days']]))
 
 
     left_col, _, right_col = st.beta_columns((4, 0.1, 1))
 
-    left_col.header('Ad text, organized by micro-cluster')
-    right_col.header('On a scale of 1 (very unlikely) to 5 (very likely), is this meta-cluster...')
+    left_col.header('**Ad text:** organized by micro-cluster')
+    #right_col.header('On a scale of 1 (very unlikely) to 5 (very likely), is this meta-cluster...')
 
-    left_col, _, mid_col, _, right_col = st.beta_columns((4, 0.1, 0.5, 0.1, 0.5))
+    #left_col, _, mid_col, _, right_col = st.beta_columns((4, 0.1, 0.3, 0.1, 0.5))
 
     # template / ad text visualization
     with left_col:
@@ -200,9 +205,10 @@ def gen_page_content(state, df):
 
     # labeling table
     labels = []
+    options = ('1: Very unlikely', '2: Unlikely', '3: Unsure', '4: Likely', '5: Very likely')
     for index, cluster_type in enumerate(('Trafficking', 'Spam', 'Scam', 'Massage parlor', 'Benign')):
-        mid_col.write('<p class="label_button">{}</p>'.format(cluster_type), unsafe_allow_html=True)
-        labels.append(right_col.slider('', 1, 5, 1, key=index))
+        right_col.write('<p class="label_button">{}</p>'.format(cluster_type), unsafe_allow_html=True)
+        labels.append(right_col.select_slider('',  options, key=index))
 
 
 # Generate content for app
@@ -216,8 +222,9 @@ state_params = {
 }
 state = SessionState.get(**state_params)
 
-default_file_path = './data/synthetic_data.csv'
+#default_file_path = './data/synthetic_data.csv'
 #default_file_path = './data/sampleRandom800kAds2021.csv'
+default_file_path = '../InfoShield/metacluster_sample-1.csv'
 #default_file_path = '../InfoShield/data/all_massage_peterjason_LSH_labels.csv'
 #file_path = st.text_input("Please specify the path of input file")
 file_path = ''
