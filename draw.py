@@ -1,8 +1,5 @@
 import altair as alt
-import datetime
 from altair.vegalite.v4.schema.channels import StrokeWidth
-import numpy as np
-import nx_altair as nxa
 import pandas as pd
 
 from itertools import chain, product
@@ -11,55 +8,9 @@ from vega_datasets import data
 import utils
 from annotated_text import annotated_text, annotation
 
+import streamlit as st
+
 alt.data_transformers.enable('csv')
-
-
-PERSON = (
-    "M1.7 -1.7h-0.8c0.3 -0.2 0.6 -0.5 0.6 -0.9c0 -0.6 "
-    "-0.4 -1 -1 -1c-0.6 0 -1 0.4 -1 1c0 0.4 0.2 0.7 0.6 "
-    "0.9h-0.8c-0.4 0 -0.7 0.3 -0.7 0.6v1.9c0 0.3 0.3 0.6 "
-    "0.6 0.6h0.2c0 0 0 0.1 0 0.1v1.9c0 0.3 0.2 0.6 0.3 "
-    "0.6h1.3c0.2 0 0.3 -0.3 0.3 -0.6v-1.8c0 0 0 -0.1 0 "
-    "-0.1h0.2c0.3 0 0.6 -0.3 0.6 -0.6v-2c0.2 -0.3 -0.1 "
-    "-0.6 -0.4 -0.6z"
-)
-
-
-def time_series(df, col):
-    ''' make bar plot of time series data
-        :param df:  Pandas DataFrame including "days" column
-        :param col: column of DataFrame representing data to encode
-        :return:    altair bar plot '''
-    return alt.Chart(df).mark_bar().encode(
-        x=alt.X('days', axis=alt.Axis(grid=False)),
-        y=alt.Y(col, axis=alt.Axis(grid=False)),
-        color=alt.value('#9467bd')
-    ).properties(
-        width=650,
-        height=300
-    )
-
-
-def graph(graph, pos):
-    ''' draw graph representation meta-cluster
-        :param graph:   networkx graph to draw
-        :param pos:     networkx layout of graph
-        :return:        altair chart displaying graph '''
-    node_attributes = set(chain.from_iterable(d.keys() for *_, d in graph.nodes(data=True)))
-    edge_attributes = set(chain.from_iterable(d.keys() for *_, d in graph.edges(data=True)))
-    return nxa.draw_networkx(
-        graph, pos=pos,
-        node_color='num_ads',
-        cmap='tealblues',
-        edge_color='grey',
-        node_tooltip=list(node_attributes),
-        edge_tooltip=list(edge_attributes)
-    ).properties(
-            width=450,
-            height=400
-    ).configure_view(
-            strokeWidth=0
-    )
 
 
 def templates(directory, df, is_infoshield):
@@ -70,61 +21,48 @@ def templates(directory, df, is_infoshield):
     if is_infoshield:
         to_write = utils.get_all_template_text(directory)
     else:
-        subdf = df.iloc[0:5]
+        subdf = df.iloc[0:20]
         to_write = ['{}:<br>{}'.format(*tup) for tup in subdf[['title', 'body']].values]
-        to_write = [annotation(text + '<br><br>', background_color='#ffffff', font_size='20px') for text in to_write]
+        to_write = [annotation(text + '<br>', background_color='#f9f9f9', font_size='20px') for text in to_write]
 
     annotated_text(*to_write,
         scrolling=True,
-        height=530,
+        height=580,
     )
 
-
-def map(df):
+@st.cache(allow_output_mutation=True)
+def map(df, date_range):
     ''' generate map with ad location data
         :param df:  Pandas DataFrame with latitude, longitude, and count data
         :return:    altair map with ad counts displayed '''
-
-    df = df[(df.lat != 1) | (df.lon != 1)]
-
     center, scale = utils.get_center_scale(df.lat, df.lon)
+    date_range = pd.date_range(*date_range)
+    df = df[((df.lat != 1) | (df.lon != 1)) & (df.days.isin(date_range))]
+
     countries = alt.topo_feature(data.world_110m.url, 'countries')
 
-    base = alt.Chart(df).mark_rect(
-        color='lightgray',
-        opacity=0.3
-    ).encode(
-        x='days:T',
-    ).properties(
-        height=75,
-        width=650
-    )
-
-    brush = alt.selection_interval(encodings=['x'],empty='all')
-    background = base.add_selection(brush)
-    selected = base.transform_filter(brush).mark_rect(color=utils.LOCATION_COLOR)
-
     base = alt.Chart(countries, width='container').mark_geoshape(
-        fill='white',
+        fill='#eeeeee',
         stroke='#DDDDDD'
     ).properties(
-        height=455,
-        width=650
+        height=355,
+        width=700
     )
 
     agg_df = utils.aggregate_locations(df)
+
+    domain = [agg_df['count'].min(), agg_df['count'].max()]
 
     scatter = alt.Chart(agg_df, width='container').mark_circle(
         color=utils.LOCATION_COLOR,
         fillOpacity=.5,
     ).encode(
-        size=alt.Size('count:Q', scale=alt.Scale(range=[50, 400]), legend=None),
+        size=alt.Size('count:Q', scale=alt.Scale(range=domain, domain=domain), legend=None),
         longitude='lon:Q',
         latitude='lat:Q',
         tooltip=['location', 'count']
-    )#.transform_filter(brush)
+    )
 
-    #return (background + selected) &
     return (base + scatter).project(
         'equirectangular',
         scale=scale,
@@ -164,7 +102,7 @@ def bubble_chart(df, y, facet, tooltip):
         stroke=None
     )
 
-
+@st.cache(allow_output_mutation=True)
 def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='blues'):
     ''' create strip plot with heatmap
         :param df:      Pandas DataFrame to display
@@ -173,14 +111,15 @@ def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='
         :param tooltip: list of DataFrame columns to include in tooltip
         :return:        altair strip plot '''
 
-    thickness = 600 / (max(df.days.dt.day) - min(df.days.dt.day) + 1)
-    return alt.Chart(df).mark_tick(thickness=thickness).encode(
+    thickness = 600 / (max(df.days.dt.day) - min(df.days.dt.day) + 1) / 10
+    sort_ = sorted(list(df[facet.split(':')[0]].unique()))
+    return alt.Chart(df).mark_tick(thickness=thickness, lineHeight=100).encode(
         x=alt.X('days:T',
-            axis=alt.Axis(grid=False, tickCount=4, format=utils.DATE_FORMAT),
+            axis=alt.Axis(grid=False, tickCount=5, format=utils.DATE_FORMAT),
             title=''),
         y=alt.Y(facet,
-            axis=None,
-            sort=sort,
+            axis=alt.Axis(grid=False, domain=False, title='', labelPadding=10, tickWidth=0, labelFontSize=utils.SMALL_FONT_SIZE),
+            sort=sort_,
         ),
         color=alt.Color(y, scale=alt.Scale(scheme=alt.SchemeParams(name=colorscheme, extent=[0, 1]),
             type='log')),
@@ -194,44 +133,11 @@ def strip_plot(df, y, facet, tooltip, sort=None, show_labels=True, colorscheme='
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
     ).configure_legend(
-        gradientLength=600,
+        gradientLength=300,
         labelFontSize=utils.SMALL_FONT_SIZE,
         titleFontSize=utils.BIG_FONT_SIZE,
         orient='top',
         title=None
-    )
-
-
-def labeling_buttons(title):
-    ''' create buttons for labeling
-        :param title:   label name for displaying as plot title
-        :return:        altair plot with 5 shapes for labeling '''
-    colors = ('#33cc33', '#ace600', '#e6e600', '#ff9900', '#ff3300')
-    tooltip = ('1: Unlikely', '2: Somewhat Unlikely', '3: Unsure', '4: Somewhat Likely', '5: Likely')
-    data = pd.DataFrame([{'id': i, 'color': c, 'label': l} for i, (c, l) in enumerate(zip(colors, tooltip))])
-    brush = alt.selection_single(nearest=True, empty='none', fields=['id'])
-
-    return alt.Chart(data).mark_point(
-        filled=True,
-        size=100
-    ).encode(
-        x=alt.X("id:O", axis=None),
-        shape=alt.ShapeValue(PERSON),
-        color=alt.condition(
-            alt.datum.id <= brush.id,
-            alt.value('#ff3300'),
-            alt.value('gray')),
-        tooltip=['label']
-    ).properties(
-        width=400,
-        height=80,
-        title=title
-    ).configure_view(
-        strokeWidth=0
-    ).add_selection(
-        brush
-    ).configure_title(
-        fontSize=utils.SMALL_FONT_SIZE
     )
 
 
@@ -309,7 +215,21 @@ def contact_bar_chart(data, col):
     )
 
 
+@st.cache(allow_output_mutation=True)
 def stream_chart(df):
+
+    days = pd.to_datetime(pd.date_range(min(df.days), max(df.days)).date, utc=True)
+
+    df_days = pd.to_datetime(df.days.values, utc=True)
+    missing_days = set(days) - set(df_days)
+
+
+    missing_data = []
+    for var in ('micro-clusters', 'ads', 'images', 'phones', 'locations'):
+        missing_data += [{'days': d, 'variable': var, 'value': 0} for d in missing_days]
+
+    df = pd.concat([df, pd.DataFrame(missing_data)])
+
     # Create a selection that chooses the nearest point & selects based on x-value
     nearest = alt.selection_single(
         nearest=True,
@@ -322,10 +242,11 @@ def stream_chart(df):
     range_ = list(utils.STAT_TO_COLOR.values())
 
     # The basic line
-    line = alt.Chart(df).mark_line(interpolate='natural').encode(
+    line = alt.Chart(df).mark_line().encode(
         x=alt.X('days:T', axis=alt.Axis(grid=False, labels=False, title='')),
         y=alt.Y('value:Q', axis=alt.Axis(grid=False, tickCount=5), title=''),
         color=alt.Color('variable:N', legend=None, scale=alt.Scale(domain=domain, range=range_)),
+        opacity=alt.value(0.5)
     ).transform_filter(
         alt.datum.variable != 'micro-clusters'
     )
@@ -348,12 +269,15 @@ def stream_chart(df):
     text = line.mark_text(
         align='left',
         dx=5, dy=-5,
-        blend=alt.Blend('multiply')
+        #blend=alt.Blend('multiply')
     ).encode(
         text=alt.condition(nearest, 'label:N', alt.value(' ')),
         size=alt.value(20),
+        opacity=alt.value(1)
     ).transform_calculate(
         label='datum.value + " " + datum.variable'
+    ).transform_filter(
+        alt.datum.value > 0
     )
 
     # Draw a rule at the location of the selection
@@ -372,12 +296,13 @@ def stream_chart(df):
     )
 
     # The basic line
-    ad_line = alt.Chart(df).mark_line(interpolate='natural').encode(
+    ad_line = alt.Chart(df).mark_line().encode(
         x=alt.X('days:T',
-            axis=alt.Axis(grid=False, tickCount=4, format=utils.DATE_FORMAT),
+            axis=alt.Axis(grid=False, tickCount=5, format=utils.DATE_FORMAT),
             title=''),
         y=alt.Y('value:Q', axis=alt.Axis(grid=False, tickCount=1), title=''),
-        color=alt.Color('variable:N', legend=alt.Legend(title=None))
+        color=alt.Color('variable:N', legend=alt.Legend(title=None)),
+        opacity=alt.value(0.5)
     ).transform_filter(
         alt.datum.variable == 'micro-clusters'
     )
@@ -391,10 +316,11 @@ def stream_chart(df):
     ad_text = ad_line.mark_text(
         align='left',
         dx=5, dy=-5,
-        blend=alt.Blend('multiply'),
+        #blend=alt.Blend('multiply'),
     ).encode(
         text=alt.condition(nearest, 'label:N', alt.value(' ')),
-        size=alt.value(20)
+        size=alt.value(20),
+        opacity=alt.value(1)
     ).transform_calculate(
         label='datum.value + " " + datum.variable'
     )

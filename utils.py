@@ -18,7 +18,21 @@ from collections import defaultdict
 DATE_FORMAT = "%e %b %y"
 
 BIG_FONT_SIZE = 24
-SMALL_FONT_SIZE = 18
+SMALL_FONT_SIZE = 20 
+  
+  
+#FEATURE_COLS = ('ad_id', 'email', 'image_id', 'phone', 'social')
+
+
+FEATURE_RENAMING = {
+    'ad_id': 'ads',
+    'phone': 'phones',
+    'image_id': 'images',
+    'email': 'emails',
+    'social': 'social accts',
+    'city_id': 'locations',
+    'LSH label': 'micro-clusters'
+}
 
 # all colors from category10 colorscheme
 LOCATION_COLOR = '#2ca02cff'    # green
@@ -61,14 +75,6 @@ BY_CLUSTER_PARAMS = ({
     'show_labels': False
 })
 
-BY_METADATA_PARAMS = ({
-    'groupby': 'metadata',
-    'sortby':  'count' 
-}, {
-    'y': 'count',
-    'facet': 'metadata:N',
-    'tooltip': ['days',  'count', 'metadata', 'type'],
-})
 
 BUTTON_STYLE = '<style>div.row-widget.stRadio > div{flex-direction:row;}</style>'
 
@@ -110,6 +116,11 @@ def write_border(stats, state):
             font-size: 20px;
             margin: 0;
         }}
+        
+        iframe {{
+            padding: 10px -10px 2px 0px;
+            background-color: #f9f9f9;
+        }}
 
         .header {{
             padding: 10px 16px;
@@ -140,7 +151,7 @@ def write_border(stats, state):
         }}
 
         .stat {{
-            margin-left: 6%;
+            margin-left: 5%;
             position: float;
             float: left;
             text-align: center;
@@ -149,6 +160,7 @@ def write_border(stats, state):
         .stat_name {{
             font-size: 20px;
             margin: 2px 0px 0px 0px;
+
         }}
 
         .stat_number {{
@@ -170,14 +182,28 @@ def write_border(stats, state):
         }}
 
         .stButton {{
-            margin-top: -60px;
-            margin-left: 40px;
+            margin-top: -65px;
+            font-size: 19px;
+        }}
+
+        .stSlider {{
+            padding: 0px 11% 0px 11%;
+            font-size: 20px;
+        }}
+
+        [data-testid] {{
+            font-size: 16px;
         }}
 
         div.stButton > button:first-child {{
             color: #f1f1f1;
             background-color: #353535;
             border: 3px solid #f1f1f1;
+        }}
+
+        p.ad_text {{
+            font-size: 24px;
+            display: inline-flex;
         }}
     </style>
     <div class="header">
@@ -188,6 +214,7 @@ def write_border(stats, state):
         {text}
     </div>
     '''.format(meta_index=state.index+1, text=stats_str), unsafe_allow_html=True)
+    # filter:blur(2px);
 
 
 ### Generic utils
@@ -225,7 +252,7 @@ def get_subdf(df, state, date_col='day_posted'):
     subdf['location'] = [prettify_location(*tup) for tup in subdf[['city_id', 'country_id']].values]
 
     subdf[date_col] = pd.to_datetime(subdf[date_col], infer_datetime_format=True)
-    subdf[date_col] = subdf[date_col].dt.normalize()
+    subdf[date_col] = subdf[date_col].dt.tz_localize(None)
 
     return subdf
  
@@ -285,12 +312,13 @@ def filename_stub(filename):
 
 
 @st.cache#(show_spinner=False)
-def basic_stats(df, cols, cluster_label='LSH label'):
+def basic_stats(df, cluster_label='LSH label'):
     ''' get basic meta-cluster level stats, not based on time
         :param df:      Pandas DataFrame representing ads from one meta-cluster
         :param cols:    columns of DataFrame containing relevant metadata
         :return:        DataFrame with metadata counts '''
 
+    cols = ('phone', 'email', 'social', 'image_id')
     metadata = {pretty_s(col): [len(extract_field(df[col])), len(set(extract_field(df[col])))] for col in cols}
     metadata['ads'] = [len(df), '--']
     metadata['micro-clusters'] = [len(df[cluster_label].unique()), '--']
@@ -303,12 +331,12 @@ def basic_stats(df, cols, cluster_label='LSH label'):
 def top_n(df, groupby, sortby, n=10):
     ''' get the top n groups from a DataFrame
         :param df:      Pandas DataFrame for one meta-cluster
-        :param groupby: column from DataFrame to create groups bef
-
- aggregation
+        :param groupby: column from DataFrame to create groups before aggregation
         :param sortby:  column from DataFrame to aggregate & sort by
         :param n:       number of groups to return
         :return         DataFrame containing data from top n groups'''
+    subscript_dict = {'1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '0': '₀'}
+    to_subscript = lambda num: ''.join([subscript_dict[s] for s in str(num)])
     top_n = df.groupby(
         groupby
     ).sum(
@@ -318,7 +346,11 @@ def top_n(df, groupby, sortby, n=10):
         ascending=False
     ).index.values[:n]
 
-    return df[df[groupby].isin(top_n)]
+    to_map = {num: 'c{}'.format(to_subscript(index)) for index, num in enumerate(top_n)}
+
+    top_df = df[df[groupby].isin(top_n)].copy()
+    top_df[groupby] = top_df[groupby].map(to_map)
+    return top_df
 
 
 ### Location data related functions
@@ -337,7 +369,7 @@ def get_center_scale(lat, lon):
     scale_lat = scale(lat, 90)
     scale_lon = scale(lon, 180)
 
-    return center, min(min(scale_lat, scale_lon) * 75, 1000)
+    return center, min(min(scale_lat, scale_lon) * 100, 2000)
 
 
 @st.cache
@@ -415,7 +447,7 @@ def extract_field_dates(df, col_name, date_col):
     #return pd.DataFrame(np.concatenate(df.apply(get_data, axis=1)), columns=df.columns)
 
 
-#@st.cache#(show_spinner=False)
+@st.cache(show_spinner=False)
 def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_col='city_id'):
     ''' extract important time-based features for a particular cluster
         :param df:          Pandas DataFrame representing one meta-cluster
@@ -425,56 +457,36 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
     def total(series):
         return len(extract_field(series))
 
-    agg_dict = {name: total for name in ('ad_id', 'email', 'image_id', 'phone', 'social')}
-    agg_dict['city_id'] = lambda series: len(series.unique())
+    agg_dict = {name: total for name in FEATURE_RENAMING.keys()}
+    agg_dict[loc_col] = lambda series: len(series.unique())
 
-    rename_dict = {
-        'ad_id': 'ads',
-        'city_id': 'locations',
-        'email': 'emails',
-        'image_id': 'images',
-        cluster_label: 'micro-clusters',
-        'social': 'social accts',
-        'phone': 'phones'
-    }
-
-    by_cluster_df = df.groupby(
+    return df.groupby(
         [date_col, cluster_label],
         as_index=False,
         sort=False
     ).agg(
         agg_dict
     ).rename(
-        columns=rename_dict
+        columns=FEATURE_RENAMING
     )
 
-    split_prefix = lambda prefix, cell: [prefix+s for s in str(cell).split(';')]
 
-    prefix_dict = {
-        'email': '',
-        'image_id': 'img-',
-        'social': '@',
-        'phone': ''
-    }
+@st.cache(show_spinner=False)
+def feature_extract(df, cluster_label='LSH label', date_col='days', loc_col='city_id'):
+    micro_cluster_features = cluster_feature_extract(df, cluster_label, date_col, loc_col)
+    header_stats = basic_stats(df)
 
-    dfs = []
-    for metadata in ('email', 'image_id', 'social', 'phone'):
-        subdf = df.copy()[[metadata, 'days', 'LSH label']].dropna()
-        subdf['type'] = metadata
-        subdf[metadata] = subdf[metadata].apply(lambda x: split_prefix(prefix_dict[metadata], x))
-        subdf = subdf.rename(columns={metadata: 'metadata'})
-        #st.write(subdf, metadata in subdf)
-        dfs.append(subdf.explode('metadata'))
+    feature_cols = [f for f in FEATURE_RENAMING.values() if f != 'ads']
 
-    metadata_dict = pd.concat(dfs).groupby(
-        [date_col, 'metadata', 'type'],
-        as_index=False,
-        sort=False
-    )['LSH label'].count().reset_index().rename(
-        columns={'LSH label': 'count'}
-    )
+    agg_dict = {f: 'sum' for f in feature_cols if header_stats[f][0]}
+    agg_dict['micro-clusters'] = 'count'
+    agg_dict['locations'] = lambda series: series.nunique()
 
-    return by_cluster_df, metadata_dict
+    features = micro_cluster_features.groupby('days', as_index=False).agg(agg_dict)
+    timeline_features = pd.melt(features, id_vars=['days'], value_vars=feature_cols)
+
+    return header_stats, micro_cluster_features, timeline_features
+
 
 
 ### Graph related utils
@@ -492,7 +504,6 @@ def construct_metaclusters(filename, df, cols, cluster_label='LSH label'):
     
     metadata_dict = defaultdict(list)
     metadata_graph = nx.Graph()
-    
 
     for cluster_id, cluster_df in df.groupby(cluster_label):
         if cluster_id == -1:
@@ -525,7 +536,6 @@ def gen_ccs(graph):
 
 
 ### Text annotation utils
-#@st.cache(hash_funcs={types.GeneratorType: id}, show_spinner=False)
 def get_all_template_text(directory):
     ''' check a directory for all possible templates and annotate them
         :param directory:   directory to check for subdirs containing templates
@@ -536,18 +546,19 @@ def get_all_template_text(directory):
     to_write = []
     is_first = True
     for i, folder in enumerate(os.listdir(directory)):
+        if folder != 'template_12':
+            continue
         result_loc = '{}/{}/text.pkl'.format(directory, folder)
         if is_first:
             is_first = False
         else:
-            to_write.append('<br><br>')
+            to_write.append('<br>')
 
         pickled = pkl.load(open(result_loc, 'rb'))
         to_write += get_template_text(*pickled)
 
     return to_write
 
-#@st.cache(hash_funcs={types.GeneratorType: id}, show_spinner=False)
 def get_template_text(i, template, ads):
     ''' annotate a particular template with relevant ads as calculated from InfoShield
         :param template:    list of tokens in template
@@ -556,20 +567,34 @@ def get_template_text(i, template, ads):
         :return:            string to write with annotated_text for this particular template '''
     index_to_type = {
         -1: ('slot', '#faa'),
-        0:  ('const', '#fea'),
+        0:  ('const', '#fffae6'),
         1:  ('sub', '#8ef'),
         2:  ('del', '#aaa'),
         3:  ('ins', '#afa'),
     }
 
 
-    to_write = ['<p><b>Micro-cluster #{}:</b> {}</p>'.format(i, template), '<br>']
+    to_write = ['<p class=ad_text><b>Micro-cluster #{}:</b> {}</p>'.format(i, template), '<br>']
 
     for ad_index, ad in enumerate(ads):
-        to_write.append('Ad #{}'.format(ad_index+1))
+        if ad_index >= 20:
+            break
+        to_write.append('<p><b> Ad #{}:</b>'.format(ad_index+1))
         prev_type = None 
         for color_i, token in ad:
+            if token == ' ':
+                continue
+
             curr_type, color = index_to_type[color_i]
+
+            if curr_type == 'const':
+                if prev_type == 'const':
+                    prev_token = to_write[-1]
+                    to_write[-1] = '{} {}'.format(prev_token, token)
+                else:
+                    to_write.append(token.replace(' ', ''))
+                prev_type = curr_type
+                continue
 
             if curr_type == prev_type:
                 prev_token = to_write[-1][0]
@@ -580,21 +605,22 @@ def get_template_text(i, template, ads):
 
             to_write.append((token, curr_type, color))
 
-        to_write.append('<br>')
+        to_write.append('</p>')
 
     # now create annotation objects. Couldn't before since we need to access prev_type, etc
     annotated = []
     for tup in to_write:
-        if tup == '<br>':
-            annotated.append(tup)
+        #if tup == '<br>':
+        #    #annotated.append(annotation(tup, background_color='#f9f9f9'))
+        #    annotated.append('<br style="background-color: #f9f9f9">')
+        #if type(tup) == str:
+        #    annotated.append(annotation(tup, background_color='#f9f9f9', font_size='{}px'.format(BIG_FONT_SIZE)))
+        #    continue
         if type(tup) == str:
-            annotated.append(annotation(tup, background_color='#ffffff', font_size='{}px'.format(BIG_FONT_SIZE)))
+            annotated.append("<span style='font-size: 24px; padding: 5px'>{}</span>".format(tup))
             continue
 
         token, curr_type, color = tup
-        if curr_type == 'const':
-            annotated.append(annotation(token, curr_type, background_color=color, font_size='{}px'.format(SMALL_FONT_SIZE)))
-            continue
         annotated.append(annotation(token, curr_type, background_color=color, font_size='{}px'.format(BIG_FONT_SIZE)))
 
     return annotated
