@@ -2,7 +2,8 @@ import functools
 from altair.utils.core import infer_dtype
 import networkx as nx
 import numpy as np
-import os, sys
+import os
+import sys
 import pandas as pd
 import pickle as pkl
 import streamlit as st
@@ -12,16 +13,15 @@ from annotated_text import annotated_text, annotation
 from collections import defaultdict
 
 
-
-### Params
+# Params
 
 DATE_FORMAT = "%e %b %y"
 
 BIG_FONT_SIZE = 24
-SMALL_FONT_SIZE = 20 
-  
-  
-#FEATURE_COLS = ('ad_id', 'email', 'image_id', 'phone', 'social')
+SMALL_FONT_SIZE = 20
+
+
+# FEATURE_COLS = ('ad_id', 'email', 'image_id', 'phone', 'social')
 
 
 FEATURE_RENAMING = {
@@ -64,10 +64,9 @@ STAT_TO_HEADER_COLOR = {
 }
 
 
-
 BY_CLUSTER_PARAMS = ({
     'groupby': 'micro-clusters',
-    'sortby':  'ads' 
+    'sortby':  'ads'
 }, {
     'y': 'ads',
     'facet': 'micro-clusters:N',
@@ -83,8 +82,8 @@ def write_border(stats, state):
     stats_str = ''
     template = '<div class=stat, style="color: {color};">{text}</div>'
     for name, (count, unique) in stats.items():
-        #name = name.split()[1]
-        #if name == 'clusters':
+        # name = name.split()[1]
+        # if name == 'clusters':
         #    name = 'micro-clusters'
 
         if name == 'image':
@@ -98,15 +97,16 @@ def write_border(stats, state):
             <p class='stat_number'>{}</p>
             '''.format(name.upper(), count)
 
-
         if unique == '--' or not count and not unique:
             text += "</div>"
-            stats_str += template.format(color=STAT_TO_HEADER_COLOR[name], text=text)
+            stats_str += template.format(
+                color=STAT_TO_HEADER_COLOR[name], text=text)
             continue
 
         text += '<p class="stat_unique">{} unique</p></div>'.format(unique)
 
-        stats_str += template.format(color=STAT_TO_HEADER_COLOR[name], text=text)
+        stats_str += template.format(
+            color=STAT_TO_HEADER_COLOR[name], text=text)
 
     # inject custom banner at top of visualization
     # note: have to double braces when using .format()
@@ -116,7 +116,7 @@ def write_border(stats, state):
             font-size: 20px;
             margin: 0;
         }}
-        
+
         iframe {{
             padding: 10px -10px 2px 0px;
             background-color: #f9f9f9;
@@ -138,14 +138,14 @@ def write_border(stats, state):
             font-weight: bold;
         }}
 
-        #ht {{
+        # ht {{
             font-size: 20px;
             margin: 0px 0px -15px 0px;
             padding: 0px;
             color: #bbbbbb;
         }}
 
-        #title {{
+        # title {{
             position: float;
             float: left;
         }}
@@ -217,8 +217,8 @@ def write_border(stats, state):
     # filter:blur(2px);
 
 
-### Generic utils
-@st.cache#(show_spinner=False)
+# Generic utils
+@st.cache  # (show_spinner=False)
 def read_csv(filename, keep_cols=[], rename_cols={}):
     ''' read csv into Pandas DataFrame
         :param filename:    location of csv file
@@ -240,35 +240,41 @@ def get_subdf(df, state, date_col='day_posted'):
     ''' get subset of DataFrame based on state.cluster, do location & date processing
         :param df:          DataFrame to take subset of
         :param state:       SessionState object, state.cluster shows subset to take
-        :param date_col:    name of DataFrame column containing date 
+        :param date_col:    name of DataFrame column containing date
         :return:            subset of DataFrame with nicely formatted locatino & date'''
     subdf = df[df['LSH label'].isin(state.cluster)].copy()
 
-    if 'location' in subdf.columns: # means pre-processed script already ran
+    if 'location' in subdf.columns:  # means pre-processed script already ran
         return subdf
 
     subdf = gen_locations(subdf)
 
-    subdf['location'] = [prettify_location(*tup) for tup in subdf[['city_id', 'country_id']].values]
+    subdf['location'] = [prettify_location(
+        *tup) for tup in subdf[['city_id', 'country_id']].values]
 
-    subdf[date_col] = pd.to_datetime(subdf[date_col], infer_datetime_format=True)
+    subdf[date_col] = pd.to_datetime(
+        subdf[date_col], infer_datetime_format=True)
     subdf[date_col] = subdf[date_col].dt.tz_localize(None)
 
     return subdf
- 
 
-#@st.cache(show_spinner=False)
+
+# @st.cache(show_spinner=False)
 def pre_process_df(df, filename, date_col='day_posted', use_cache=True):
-    clean_filename = './data/{}-cleaned.csv'.format(os.path.splitext(os.path.basename(filename))[0])
+    clean_filename = './data/{}-cleaned.csv'.format(
+        os.path.splitext(os.path.basename(filename))[0])
     if use_cache and os.path.exists(clean_filename):
         copy_df = pd.read_csv(clean_filename)
-        copy_df['days'] = pd.to_datetime(copy_df.days, infer_datetime_format=True).dt.normalize()
+        copy_df['days'] = pd.to_datetime(
+            copy_df.days, infer_datetime_format=True).dt.normalize()
         return copy_df
 
     copy_df = df.copy()
-    copy_df['location'] = [prettify_location(*tup) for tup in df[['city_id', 'country_id']].values]
+    copy_df['location'] = [prettify_location(
+        *tup) for tup in df[['city_id', 'country_id']].values]
 
-    days = pd.to_datetime(copy_df[date_col], infer_datetime_format=True).dt.normalize()
+    days = pd.to_datetime(
+        copy_df[date_col], infer_datetime_format=True).dt.normalize()
     copy_df['days'] = days.dt.tz_localize('UTC', ambiguous=True)
 
     copy_df = gen_locations(copy_df)
@@ -278,7 +284,7 @@ def pre_process_df(df, filename, date_col='day_posted', use_cache=True):
     return copy_df
 
 
-@st.cache#(show_spinner=False)
+@st.cache  # (show_spinner=False)
 def extract_field(series):
     ''' extract values from Pandas Series, where some entries represent multiple values
         :param series:  Pandas Series to get values from
@@ -311,7 +317,7 @@ def filename_stub(filename):
     return os.path.basename(filename).split('.')[0]
 
 
-@st.cache#(show_spinner=False)
+@st.cache  # (show_spinner=False)
 def basic_stats(df, cluster_label='LSH label'):
     ''' get basic meta-cluster level stats, not based on time
         :param df:      Pandas DataFrame representing ads from one meta-cluster
@@ -319,7 +325,8 @@ def basic_stats(df, cluster_label='LSH label'):
         :return:        DataFrame with metadata counts '''
 
     cols = ('phone', 'email', 'social', 'image_id')
-    metadata = {pretty_s(col): [len(extract_field(df[col])), len(set(extract_field(df[col])))] for col in cols}
+    metadata = {pretty_s(col): [len(extract_field(df[col])), len(
+        set(extract_field(df[col])))] for col in cols}
     metadata['ads'] = [len(df), '--']
     metadata['micro-clusters'] = [len(df[cluster_label].unique()), '--']
     metadata['locations'] = [len(df.city_id.unique()), '--']
@@ -335,8 +342,11 @@ def top_n(df, groupby, sortby, n=10):
         :param sortby:  column from DataFrame to aggregate & sort by
         :param n:       number of groups to return
         :return         DataFrame containing data from top n groups'''
-    subscript_dict = {'1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '0': '₀'}
-    to_subscript = lambda num: ''.join([subscript_dict[s] for s in str(num)])
+    subscript_dict = {'1': '₁', '2': '₂', '3': '₃', '4': '₄',
+                      '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '0': '₀'}
+
+    def to_subscript(num): return ''.join(
+        [subscript_dict[s] for s in str(num)])
     top_n = df.groupby(
         groupby
     ).sum(
@@ -346,23 +356,25 @@ def top_n(df, groupby, sortby, n=10):
         ascending=False
     ).index.values[:n]
 
-    to_map = {num: 'c{}'.format(to_subscript(index)) for index, num in enumerate(top_n)}
+    to_map = {num: 'c{}'.format(to_subscript(index))
+              for index, num in enumerate(top_n)}
 
     top_df = df[df[groupby].isin(top_n)].copy()
     top_df[groupby] = top_df[groupby].map(to_map)
     return top_df
 
 
-### Location data related functions
+# Location data related functions
 @st.cache
 def get_center_scale(lat, lon):
     ''' get centering and scale parameters for map display
         :param lat: list of latitudes
         :param lon: list of longitudes
         :return:    center (midpoint) and scaling '''
-    midpoint = lambda lst: (max(lst) + min(lst)) / 2
+    def midpoint(lst): return (max(lst) + min(lst)) / 2
 
-    scale = lambda lst, const: const*2 / (max(lst) - min(lst)) if max(lst) - min(lst) else 100
+    def scale(lst, const): return const*2 / (max(lst) -
+                                             min(lst)) if max(lst) - min(lst) else 100
 
     center = midpoint(lon), midpoint(lat)
 
@@ -378,8 +390,8 @@ def gen_locations(df):
         :param df:  Pandas DataFrame with column "city_id" to get coordinates from
         :return:    DataFrame with latitude and longitude data '''
     cities_df = read_csv('~/grad_projects/data/aht_data/metadata/cities.csv',
-        keep_cols=['id', 'xcoord', 'ycoord'],
-        rename_cols={'xcoord': 'lat', 'ycoord': 'lon'})
+                         keep_cols=['id', 'xcoord', 'ycoord'],
+                         rename_cols={'xcoord': 'lat', 'ycoord': 'lon'})
 
     return pd.merge(df, cities_df, left_on='city_id', right_on='id', sort=False)
 
@@ -391,7 +403,8 @@ def prettify_location(city, country):
         :param country: country_id as specified by Marinus
         :return:        string of format {state}, {country} '''
     cities_df = read_csv('~/grad_projects/data/aht_data/metadata/cities.csv')
-    countries_df = read_csv('~/grad_projects/data/aht_data/metadata/countries.csv')
+    countries_df = read_csv(
+        '~/grad_projects/data/aht_data/metadata/countries.csv')
 
     # should only happen if nan
     if country not in countries_df.id or city not in cities_df.id:
@@ -411,19 +424,19 @@ def aggregate_locations(df):
         ['location'],
         as_index=False
     ).agg({
-         'ad_id': 'count',
-         'lat': 'mean',
-         'lon': 'mean'
+        'ad_id': 'count',
+        'lat': 'mean',
+        'lon': 'mean'
     }).rename(
         columns={'ad_id': 'count'}
     )
 
 
-### Date related
+# Date related
 @st.cache
 def extract_field_dates(df, col_name, date_col):
     ''' extract values from Pandas DataFrame with date, where one row represents multiple values
-        :param df:          Pandas DataFrame to get data from 
+        :param df:          Pandas DataFrame to get data from
         :param col_name:    column from DataFrame with values to extract
         :param date_col:    column from DataFrame with time data
         :return:            DataFrame with each value's count, by day '''
@@ -432,11 +445,14 @@ def extract_field_dates(df, col_name, date_col):
     if not len(df):
         return pd.DataFrame(columns=['metadata', 'day_posted', 'count', 'type'])
 
-    get_data = lambda row: [(val, row[date_col]) for val in str(row[col_name]).split(';')]
-    concat_reduce = lambda data: functools.reduce(lambda x, y: x + y, data)
+    def get_data(row): return [(val, row[date_col])
+                               for val in str(row[col_name]).split(';')]
+
+    def concat_reduce(data): return functools.reduce(lambda x, y: x + y, data)
 
     # expand fields that have lists, so each is a row in df
-    meta_df = pd.DataFrame(concat_reduce(df.apply(get_data, axis=1)), columns=df.columns)
+    meta_df = pd.DataFrame(concat_reduce(
+        df.apply(get_data, axis=1)), columns=df.columns)
     # aggregate by count
     meta_df = meta_df.groupby([col_name, date_col], as_index=False).size()
     # prettify df columns
@@ -444,7 +460,7 @@ def extract_field_dates(df, col_name, date_col):
     meta_df = meta_df.rename(columns={'size': 'count', col_name: 'metadata'})
     return meta_df
 
-    #return pd.DataFrame(np.concatenate(df.apply(get_data, axis=1)), columns=df.columns)
+    # return pd.DataFrame(np.concatenate(df.apply(get_data, axis=1)), columns=df.columns)
 
 
 @st.cache(show_spinner=False)
@@ -473,7 +489,8 @@ def cluster_feature_extract(df, cluster_label='LSH label', date_col='days', loc_
 
 @st.cache(show_spinner=False)
 def feature_extract(df, cluster_label='LSH label', date_col='days', loc_col='city_id'):
-    micro_cluster_features = cluster_feature_extract(df, cluster_label, date_col, loc_col)
+    micro_cluster_features = cluster_feature_extract(
+        df, cluster_label, date_col, loc_col)
     header_stats = basic_stats(df)
 
     feature_cols = [f for f in FEATURE_RENAMING.values() if f != 'ads']
@@ -482,26 +499,27 @@ def feature_extract(df, cluster_label='LSH label', date_col='days', loc_col='cit
     agg_dict['micro-clusters'] = 'count'
     agg_dict['locations'] = lambda series: series.nunique()
 
-    features = micro_cluster_features.groupby('days', as_index=False).agg(agg_dict)
-    timeline_features = pd.melt(features, id_vars=['days'], value_vars=feature_cols)
+    features = micro_cluster_features.groupby(
+        'days', as_index=False).agg(agg_dict)
+    timeline_features = pd.melt(
+        features, id_vars=['days'], value_vars=feature_cols)
 
     return header_stats, micro_cluster_features, timeline_features
 
 
-
-### Graph related utils
-#@st.cache#(show_spinner=False)
+# Graph related utils
+# @st.cache#(show_spinner=False)
 def construct_metaclusters(filename, df, cols, cluster_label='LSH label'):
     ''' construct metadata graph from dataframe already split into clusters
     :param df:              pandas dataframe containing ad info
     :param cols:            subset of @df.columns to link clusters by
-    :param cluster_label:   column from @df.columns containing cluster label 
+    :param cluster_label:   column from @df.columns containing cluster label
     :return                 nx graph, where each connected component is a meta-cluster '''
 
     pkl_filename = 'pkl_files/{}.pkl'.format(filename)
     if os.path.exists(pkl_filename):
         return pkl.load(open(pkl_filename, 'rb'))
-    
+
     metadata_dict = defaultdict(list)
     metadata_graph = nx.Graph()
 
@@ -509,33 +527,34 @@ def construct_metaclusters(filename, df, cols, cluster_label='LSH label'):
         if cluster_id == -1:
             continue
         metadata_graph.add_node(cluster_id, num_ads=len(cluster_df))
-        
+
         for name in cols:
-            metadata_graph.nodes[cluster_id][name] = extract_field(cluster_df[name])
-            
+            metadata_graph.nodes[cluster_id][name] = extract_field(
+                cluster_df[name])
+
             for elem in metadata_graph.nodes[cluster_id][name]:
                 edges = [(cluster_id, node) for node in metadata_dict[elem]]
                 metadata_graph.add_edges_from(edges, type=name)
                 metadata_dict[elem].append(cluster_id)
-                    
+
     pkl.dump(metadata_graph, open(pkl_filename, 'wb'))
     return metadata_graph
 
 
-#@st.cache(hash_funcs={types.GeneratorType: id})#, show_spinner=False)
+# @st.cache(hash_funcs={types.GeneratorType: id})#, show_spinner=False)
 def gen_ccs(graph):
     ''' return generator for connected components, sorted by size
-        :param graph:   nx Graph 
+        :param graph:   nx Graph
         :return         generator of connected components '''
 
-    #components = sorted(nx.connected_components(graph), reverse=True, key=len)
+    # components = sorted(nx.connected_components(graph), reverse=True, key=len)
     components = nx.connected_components(graph)
     for component in components:
         print('# clusters', len(component))
         yield component
 
 
-### Text annotation utils
+# Text annotation utils
 def get_all_template_text(directory):
     ''' check a directory for all possible templates and annotate them
         :param directory:   directory to check for subdirs containing templates
@@ -559,6 +578,7 @@ def get_all_template_text(directory):
 
     return to_write
 
+
 def get_template_text(i, template, ads):
     ''' annotate a particular template with relevant ads as calculated from InfoShield
         :param template:    list of tokens in template
@@ -573,14 +593,14 @@ def get_template_text(i, template, ads):
         3:  ('ins', '#afa'),
     }
 
-
-    to_write = ['<p class=ad_text><b>Micro-cluster #{}:</b> {}</p>'.format(i, template), '<br>']
+    to_write = [
+        '<p class=ad_text><b>Micro-cluster #{}:</b> {}</p>'.format(i, template), '<br>']
 
     for ad_index, ad in enumerate(ads):
         if ad_index >= 20:
             break
         to_write.append('<p><b> Ad #{}:</b>'.format(ad_index+1))
-        prev_type = None 
+        prev_type = None
         for color_i, token in ad:
             if token == ' ':
                 continue
@@ -598,7 +618,8 @@ def get_template_text(i, template, ads):
 
             if curr_type == prev_type:
                 prev_token = to_write[-1][0]
-                to_write[-1] = ('{} {}'.format(prev_token, token), curr_type, color)
+                to_write[-1] = ('{} {}'.format(prev_token,
+                                token), curr_type, color)
                 continue
 
             prev_type = curr_type
@@ -610,32 +631,39 @@ def get_template_text(i, template, ads):
     # now create annotation objects. Couldn't before since we need to access prev_type, etc
     annotated = []
     for tup in to_write:
-        #if tup == '<br>':
+        # if tup == '<br>':
         #    #annotated.append(annotation(tup, background_color='#f9f9f9'))
         #    annotated.append('<br style="background-color: #f9f9f9">')
-        #if type(tup) == str:
+        # if type(tup) == str:
         #    annotated.append(annotation(tup, background_color='#f9f9f9', font_size='{}px'.format(BIG_FONT_SIZE)))
         #    continue
         if type(tup) == str:
-            annotated.append("<span style='font-size: 24px; padding: 5px'>{}</span>".format(tup))
+            annotated.append(
+                "<span style='font-size: 24px; padding: 5px'>{}</span>".format(tup))
             continue
 
         token, curr_type, color = tup
-        annotated.append(annotation(token, curr_type, background_color=color, font_size='{}px'.format(BIG_FONT_SIZE)))
+        annotated.append(annotation(
+            token, curr_type, background_color=color, font_size='{}px'.format(BIG_FONT_SIZE)))
 
     return annotated
 
 
-#def write_labels(filename, meta_cluster_label, cluster_labels, labels):
-#    label_filename = '{}-meta-labels.csv'.format(filename)
-#    if os.path.exists(label_filename):
-#        label_df = read_csv('{}-meta-labels.csv'.format(filename))
-#    else:
-#        label_df = pd.DataFrame(columns=['meta_cluster_label', 'cluster_labels'] + labels.keys()))
-#
-#    # add new row
-#    row = pd.Series([meta_cluster_label, np.array(cluster_labels)] + labels.values())
-#
-#    label_df = label_df.append(row)
-#
-#    label_df.to_csv(label_filename, index=False)
+def write_labels(filename, meta_cluster_label, cluster_labels, labels):
+    print('filename:', filename)
+    print(labels)
+    label_filename = '{}-meta-labels.csv'.format(os.path.splitext(filename)[0])
+    if os.path.exists(label_filename):
+        label_df = read_csv('{}-meta-labels.csv'.format(filename))
+    else:
+        label_df = pd.DataFrame(
+            columns=['meta_cluster_label', 'cluster_labels'] + list(labels.keys()))
+
+    # add new row
+    row = labels.copy()
+    row['meta_cluster_label'] = meta_cluster_label
+    row['cluster_labels'] = np.array(cluster_labels)
+
+    label_df = label_df.append(row, ignore_index=True)
+
+    label_df.to_csv(label_filename, index=False)
